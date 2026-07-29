@@ -50,20 +50,8 @@ jobs:
             exit 1
           fi
 
-      - name: Debug token presence
-        run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "ERROR: NPM_TOKEN secret is empty or not set"
-            exit 1
-          else
-            echo "NPM_TOKEN is set (length: ${#NODE_AUTH_TOKEN})"
-            echo "First 4 chars: ${NODE_AUTH_TOKEN:0:4}"
-          fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
       - name: Publish to npm
-        run: npm publish --access public
+        run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
