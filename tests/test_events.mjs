@@ -111,7 +111,7 @@ describe("Events: dispatcher installation", () => {
     const projectRoot = createTestProject(false);
     try {
       const path = installDispatcher(projectRoot);
-      assert.ok(path.endsWith(".agents/dispatcher.mjs"));
+      assert.ok(path.replace(/\\/g, "/").endsWith(".agents/dispatcher.mjs"), `Path: ${path}`);
       assert.ok(existsSync(path));
       const content = readFileSync(path, "utf-8");
       assert.ok(content.includes("Script path") || content.includes("script"));
