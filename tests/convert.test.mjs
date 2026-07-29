@@ -28,9 +28,9 @@ describe("Command generation — Markdown", () => {
     const agent = getAgent("opencode");
     const content = generateCommand(mockSkill, agent, { mode: "wrapper", source: "test" });
 
-    assert.ok(content.includes("Invoke the `team-setup` skill using the `skill` tool."));
+    assert.ok(content.includes("Invoke the `team-setup` skill."));
     assert.ok(content.includes("$ARGUMENTS"));
-    assert.ok(!content.includes("# Team Setup"));
+    assert.ok(!content.includes("## When to Use"));
   });
 
   it("includes base directory note in inline mode", () => {

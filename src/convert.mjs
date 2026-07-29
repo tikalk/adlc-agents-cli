@@ -40,7 +40,45 @@ function buildInlineBody(skill, agent) {
 }
 
 function buildWrapperBody(skill) {
-  return `Invoke the \`${skill.name}\` skill using the \`skill\` tool.`;
+  const summary = extractSkillSummary(skill.body);
+  const lead = `Invoke the \`${skill.name}\` skill.`;
+  if (summary) {
+    return `${lead}\n\n${summary}`;
+  }
+  return lead;
+}
+
+function extractSkillSummary(body) {
+  if (!body) return "";
+
+  // 1. Try matching ## Overview, ## Goal, or ## What this skill does
+  const overviewMatch = body.match(/##\s*(?:Overview|Goal|What this skill does)[\r\n]+([\s\S]*?)(?=[\r\n]+##|\r?\n\r?\n#|$)/i);
+  if (overviewMatch && overviewMatch[1].trim()) {
+    const text = overviewMatch[1].trim();
+    // Limit to first 2 paragraphs or ~400 chars for conciseness
+    const paragraphs = text.split(/\r?\n\r?\n/);
+    return paragraphs.slice(0, 2).join("\n\n").trim();
+  }
+
+  // 2. Fallback: take content after title up to next ## heading
+  const lines = body.split("\n");
+  const summaryLines = [];
+  let pastTitle = false;
+  for (const line of lines) {
+    if (line.startsWith("# ")) {
+      pastTitle = true;
+      continue;
+    }
+    if (line.startsWith("## ")) {
+      if (summaryLines.length > 0) break;
+      continue;
+    }
+    if (pastTitle) {
+      summaryLines.push(line);
+      if (summaryLines.join("\n").length > 400) break;
+    }
+  }
+  return summaryLines.join("\n").trim();
 }
 
 function buildArgsLine(agent) {
