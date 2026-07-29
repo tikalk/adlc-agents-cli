@@ -69,11 +69,11 @@ describe("E2E: skill discovery + command generation", () => {
       const setupContent = readFileSync(join(commandsDir, "team-setup.md"), "utf-8");
       assert.ok(isGenerated(setupContent));
       assert.ok(setupContent.includes("Clone, scaffold, or configure"));
-      assert.ok(setupContent.includes("# Team Setup"));
+      assert.ok(setupContent.includes("Invoke the `team-setup` skill using the `skill` tool."));
 
       const briefContent = readFileSync(join(commandsDir, "mission-brief.md"), "utf-8");
       assert.ok(isGenerated(briefContent));
-      assert.ok(briefContent.includes("End-to-end mission pipeline"));
+      assert.ok(briefContent.includes("Invoke the `mission-brief` skill using the `skill` tool."));
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }

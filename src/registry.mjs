@@ -14,7 +14,7 @@ export const AGENTS = {
     commands_ext: ".md",
     args_placeholder: "$ARGUMENTS",
     format: "markdown",
-    default_mode: "inline",
+    default_mode: "wrapper",
     events: true,
   },
   "claude-code": {
@@ -26,7 +26,7 @@ export const AGENTS = {
     commands_ext: ".md",
     args_placeholder: "$ARGUMENTS",
     format: "markdown",
-    default_mode: "inline",
+    default_mode: "wrapper",
     events: true,
   },
   cursor: {
@@ -38,7 +38,7 @@ export const AGENTS = {
     commands_ext: ".md",
     args_placeholder: "$ARGUMENTS",
     format: "markdown",
-    default_mode: "inline",
+    default_mode: "wrapper",
     events: true,
   },
   "github-copilot": {
@@ -50,7 +50,7 @@ export const AGENTS = {
     commands_ext: ".prompt.md",
     args_placeholder: "$ARGUMENTS",
     format: "markdown",
-    default_mode: "inline",
+    default_mode: "wrapper",
     events: true,
   },
   codex: {
@@ -62,7 +62,7 @@ export const AGENTS = {
     commands_ext: ".md",
     args_placeholder: "$ARGUMENTS",
     format: "markdown",
-    default_mode: "inline",
+    default_mode: "wrapper",
     events: true,
   },
   devin: {

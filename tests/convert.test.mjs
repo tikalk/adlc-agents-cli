@@ -14,7 +14,7 @@ const mockSkill = {
 describe("Command generation — Markdown", () => {
   it("generates inline markdown command with frontmatter", () => {
     const agent = getAgent("opencode");
-    const content = generateCommand(mockSkill, agent, { source: "tikalk/adlc-team-skills" });
+    const content = generateCommand(mockSkill, agent, { mode: "inline", source: "tikalk/adlc-team-skills" });
 
     assert.ok(content.startsWith("---\n"));
     assert.ok(content.includes("description: Clone, scaffold, or configure"));
@@ -28,14 +28,14 @@ describe("Command generation — Markdown", () => {
     const agent = getAgent("opencode");
     const content = generateCommand(mockSkill, agent, { mode: "wrapper", source: "test" });
 
-    assert.ok(content.includes("Invoke the `team-setup` skill."));
+    assert.ok(content.includes("Invoke the `team-setup` skill using the `skill` tool."));
     assert.ok(content.includes("$ARGUMENTS"));
     assert.ok(!content.includes("# Team Setup"));
   });
 
   it("includes base directory note in inline mode", () => {
     const agent = getAgent("opencode");
-    const content = generateCommand(mockSkill, agent, { source: "test" });
+    const content = generateCommand(mockSkill, agent, { mode: "inline", source: "test" });
 
     assert.ok(content.includes("Base directory for this skill:"));
     assert.ok(content.includes("/project/.agents/skills/team-setup"));

@@ -40,7 +40,7 @@ function buildInlineBody(skill, agent) {
 }
 
 function buildWrapperBody(skill) {
-  return `Invoke the \`${skill.name}\` skill.`;
+  return `Invoke the \`${skill.name}\` skill using the \`skill\` tool.`;
 }
 
 function buildArgsLine(agent) {
