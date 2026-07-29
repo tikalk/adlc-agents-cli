@@ -95,7 +95,7 @@ export function resolveEvents(manifest, agentConfig) {
   const resolved = {};
   for (const [canonicalEvent, handlers] of Object.entries(manifest.events)) {
     const nativeEvent = agentConfig.canonical_to_native[canonicalEvent];
-    if (!nativeEvent) continue; // agent doesn't support this event
+    if (!nativeEvent) continue; // agent doesn't support this event (null = skip)
 
     const handlerList = Array.isArray(handlers) ? handlers : [handlers];
     resolved[canonicalEvent] = handlerList.filter((h) => h && h.skill).map((h) => ({
@@ -103,6 +103,7 @@ export function resolveEvents(manifest, agentConfig) {
       description: h.description || "",
       timeout: h.timeout || 60,
       matcher: h.matcher || null,
+      nativeEvent,
     }));
   }
   return resolved;
@@ -181,10 +182,27 @@ function buildOpenCodeHooks(resolvedEvents, skillsDir, agentConfig) {
   for (const [canonicalEvent, handlers] of Object.entries(resolvedEvents)) {
     const nativeEvent = agentConfig.canonical_to_native[canonicalEvent];
     for (const h of handlers) {
-      entries.push(`    "${nativeEvent}": async (_input, output) => {
+      // Different opencode hooks have different output shapes:
+      // - experimental.chat.system.transform: output.system.push(string)
+      // - chat.message: output.parts.push({ type: "text", text: string })
+      // - tool.execute.before/after: output.args (not context injection)
+      if (nativeEvent === "experimental.chat.system.transform") {
+        entries.push(`    "${nativeEvent}": async (_input, output) => {
       const ctx = runEvent("${h.skill}", "${canonicalEvent}", ${h.timeout})
       if (ctx) output.system.push(ctx)
     }`);
+      } else if (nativeEvent === "chat.message") {
+        entries.push(`    "${nativeEvent}": async (_input, output) => {
+      const ctx = runEvent("${h.skill}", "${canonicalEvent}", ${h.timeout})
+      if (ctx) output.parts.push({ type: "text", text: ctx })
+    }`);
+      } else {
+        // Generic fallback for tool.execute.before/after etc.
+        entries.push(`    "${nativeEvent}": async (_input, output) => {
+      const ctx = runEvent("${h.skill}", "${canonicalEvent}", ${h.timeout})
+      if (ctx && output.system) output.system.push(ctx)
+    }`);
+      }
     }
   }
   return entries.join(",\n");

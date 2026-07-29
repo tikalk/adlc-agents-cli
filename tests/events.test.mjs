@@ -135,8 +135,8 @@ describe("Events: opencode plugin generation", () => {
       assert.ok(content.includes("runEvent"));
       assert.ok(content.includes("team-boot"));
       assert.ok(content.includes("team-discover"));
-      assert.ok(content.includes("session.start"));
-      assert.ok(content.includes("chat.message"));
+      assert.ok(content.includes("experimental.chat.system.transform"), "session_start → system.transform hook");
+      assert.ok(content.includes("chat.message"), "user_prompt_submit → chat.message hook");
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
@@ -399,12 +399,12 @@ describe("Registry: events data", () => {
     ]);
   });
 
-  it("every event agent has canonical_to_native for all 6 events", () => {
+  it("every event agent has canonical_to_native entries for all 6 events (null = unsupported)", () => {
     for (const [key, config] of Object.entries(EVENT_AGENTS)) {
       for (const event of CANONICAL_EVENTS) {
         assert.ok(
-          config.canonical_to_native[event],
-          `Agent ${key} missing native mapping for ${event}`,
+          event in config.canonical_to_native,
+          `Agent ${key} missing canonical_to_native entry for ${event}`,
         );
       }
     }
