@@ -7,7 +7,8 @@
     "adlc-agents-cli": "bin/adlc-agents-cli.mjs"
   },
   "scripts": {
-    "test": "node --test tests/*.mjs"
+    "test": "node --test tests/*.mjs",
+    "prepublishOnly": "npm test"
   },
   "engines": {
     "node": ">=18"
@@ -42,7 +43,12 @@
   "files": [
     "bin/",
     "src/",
+    "docs/",
     "README.md",
     "LICENSE"
-  ]
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
 }
