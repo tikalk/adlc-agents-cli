@@ -1,0 +1,497 @@
+// Agent registry — data-driven table of all supported coding agents.
+// Each entry declares where npx skills installs SKILL.md files (skills_dir),
+// where we generate command files (commands_dir), the file format, and whether
+// the agent supports session_start context-injection events.
+
+export const AGENTS = {
+  // ── Markdown command agents ──────────────────────────────────────────
+  opencode: {
+    name: "OpenCode",
+    npx_agent: "opencode",
+    skills_dir: ".agents/skills",
+    global_skills_dir: "~/.config/opencode/skills",
+    commands_dir: ".opencode/commands",
+    commands_ext: ".md",
+    args_placeholder: "$ARGUMENTS",
+    format: "markdown",
+    default_mode: "inline",
+    events: true,
+  },
+  "claude-code": {
+    name: "Claude Code",
+    npx_agent: "claude-code",
+    skills_dir: ".claude/skills",
+    global_skills_dir: "~/.claude/skills",
+    commands_dir: ".claude/commands",
+    commands_ext: ".md",
+    args_placeholder: "$ARGUMENTS",
+    format: "markdown",
+    default_mode: "inline",
+    events: true,
+  },
+  cursor: {
+    name: "Cursor",
+    npx_agent: "cursor",
+    skills_dir: ".agents/skills",
+    global_skills_dir: "~/.cursor/skills",
+    commands_dir: ".cursor/commands",
+    commands_ext: ".md",
+    args_placeholder: "$ARGUMENTS",
+    format: "markdown",
+    default_mode: "inline",
+    events: true,
+  },
+  "github-copilot": {
+    name: "GitHub Copilot",
+    npx_agent: "github-copilot",
+    skills_dir: ".agents/skills",
+    global_skills_dir: "~/.copilot/skills",
+    commands_dir: ".github/prompts",
+    commands_ext: ".prompt.md",
+    args_placeholder: "$ARGUMENTS",
+    format: "markdown",
+    default_mode: "inline",
+    events: true,
+  },
+  codex: {
+    name: "Codex",
+    npx_agent: "codex",
+    skills_dir: ".agents/skills",
+    global_skills_dir: "~/.codex/skills",
+    commands_dir: "~/.codex/prompts",
+    commands_ext: ".md",
+    args_placeholder: "$ARGUMENTS",
+    format: "markdown",
+    default_mode: "inline",
+    events: true,
+  },
+  devin: {
+    name: "Devin",
+    npx_agent: "devin",
+    skills_dir: ".devin/skills",
+    global_skills_dir: "~/.config/devin/skills",
+    commands_dir: ".devin/commands",
+    commands_ext: ".md",
+    args_placeholder: "$ARGUMENTS",
+    format: "markdown",
+    default_mode: "inline",
+    events: true,
+  },
+  amp: {
+    name: "Amp",
+    npx_agent: "amp",
+    skills_dir: ".agents/skills",
+    global_skills_dir: "~/.config/agents/skills",
+    commands_dir: ".agents/commands",
+    commands_ext: ".md",
+    args_placeholder: "$ARGUMENTS",
+    format: "markdown",
+    default_mode: "inline",
+    events: false,
+  },
+  augment: {
+    name: "Augment",
+    npx_agent: "augment",
+    skills_dir: ".augment/skills",
+    global_skills_dir: "~/.augment/skills",
+    commands_dir: ".augment/commands",
+    commands_ext: ".md",
+    args_placeholder: "$ARGUMENTS",
+    format: "markdown",
+    default_mode: "inline",
+    events: false,
+  },
+  bob: {
+    name: "IBM Bob",
+    npx_agent: "bob",
+    skills_dir: ".bob/skills",
+    global_skills_dir: "~/.bob/skills",
+    commands_dir: ".bob/commands",
+    commands_ext: ".md",
+    args_placeholder: "$ARGUMENTS",
+    format: "markdown",
+    default_mode: "inline",
+    events: false,
+  },
+  codebuddy: {
+    name: "CodeBuddy",
+    npx_agent: "codebuddy",
+    skills_dir: ".codebuddy/skills",
+    global_skills_dir: "~/.codebuddy/skills",
+    commands_dir: ".codebuddy/commands",
+    commands_ext: ".md",
+    args_placeholder: "$ARGUMENTS",
+    format: "markdown",
+    default_mode: "inline",
+    events: false,
+  },
+  cline: {
+    name: "Cline",
+    npx_agent: "cline",
+    skills_dir: ".agents/skills",
+    global_skills_dir: "~/.agents/skills",
+    commands_dir: ".clinerules/workflows",
+    commands_ext: ".md",
+    args_placeholder: "$ARGUMENTS",
+    format: "markdown",
+    default_mode: "inline",
+    events: false,
+  },
+  firebender: {
+    name: "Firebender",
+    npx_agent: "firebender",
+    skills_dir: ".agents/skills",
+    global_skills_dir: "~/.firebender/skills",
+    commands_dir: ".firebender/commands",
+    commands_ext: ".mdc",
+    args_placeholder: "$ARGUMENTS",
+    format: "markdown",
+    default_mode: "inline",
+    events: false,
+  },
+  forge: {
+    name: "ForgeCode",
+    npx_agent: null,
+    skills_dir: ".agents/skills",
+    global_skills_dir: null,
+    commands_dir: ".forge/commands",
+    commands_ext: ".md",
+    args_placeholder: "{{parameters}}",
+    format: "markdown",
+    default_mode: "inline",
+    events: false,
+  },
+  junie: {
+    name: "Junie",
+    npx_agent: "junie",
+    skills_dir: ".junie/skills",
+    global_skills_dir: "~/.junie/skills",
+    commands_dir: ".junie/commands",
+    commands_ext: ".md",
+    args_placeholder: "$ARGUMENTS",
+    format: "markdown",
+    default_mode: "inline",
+    events: false,
+  },
+  kilo: {
+    name: "Kilo Code",
+    npx_agent: "kilo",
+    skills_dir: ".kilocode/skills",
+    global_skills_dir: "~/.kilocode/skills",
+    commands_dir: ".kilocode/workflows",
+    commands_ext: ".md",
+    args_placeholder: "$ARGUMENTS",
+    format: "markdown",
+    default_mode: "inline",
+    events: false,
+  },
+  "kiro-cli": {
+    name: "Kiro CLI",
+    npx_agent: "kiro-cli",
+    skills_dir: ".kiro/skills",
+    global_skills_dir: "~/.kiro/skills",
+    commands_dir: ".kiro/prompts",
+    commands_ext: ".md",
+    args_placeholder: "$ARGUMENTS",
+    format: "markdown",
+    default_mode: "inline",
+    events: false,
+  },
+  omp: {
+    name: "OMP",
+    npx_agent: null,
+    skills_dir: ".agents/skills",
+    global_skills_dir: null,
+    commands_dir: ".omp/commands",
+    commands_ext: ".md",
+    args_placeholder: "$ARGUMENTS",
+    format: "markdown",
+    default_mode: "inline",
+    events: false,
+  },
+  pi: {
+    name: "Pi",
+    npx_agent: "pi",
+    skills_dir: ".pi/skills",
+    global_skills_dir: "~/.pi/agent/skills",
+    commands_dir: ".pi/prompts",
+    commands_ext: ".md",
+    args_placeholder: "$ARGUMENTS",
+    format: "markdown",
+    default_mode: "inline",
+    events: false,
+  },
+  qoder: {
+    name: "Qoder",
+    npx_agent: "qoder",
+    skills_dir: ".qoder/skills",
+    global_skills_dir: "~/.qoder/skills",
+    commands_dir: ".qoder/commands",
+    commands_ext: ".md",
+    args_placeholder: "$ARGUMENTS",
+    format: "markdown",
+    default_mode: "inline",
+    events: false,
+  },
+  "qwen-code": {
+    name: "Qwen Code",
+    npx_agent: "qwen-code",
+    skills_dir: ".qwen/skills",
+    global_skills_dir: "~/.qwen/skills",
+    commands_dir: ".qwen/commands",
+    commands_ext: ".md",
+    args_placeholder: "$ARGUMENTS",
+    format: "markdown",
+    default_mode: "inline",
+    events: true,
+  },
+  shai: {
+    name: "Shai",
+    npx_agent: null,
+    skills_dir: ".agents/skills",
+    global_skills_dir: null,
+    commands_dir: ".shai/commands",
+    commands_ext: ".md",
+    args_placeholder: "$ARGUMENTS",
+    format: "markdown",
+    default_mode: "inline",
+    events: false,
+  },
+  // ── TOML command agents ──────────────────────────────────────────────
+  "gemini-cli": {
+    name: "Gemini CLI",
+    npx_agent: "gemini-cli",
+    skills_dir: ".agents/skills",
+    global_skills_dir: "~/.gemini/skills",
+    commands_dir: ".gemini/commands",
+    commands_ext: ".toml",
+    args_placeholder: "{{args}}",
+    format: "toml",
+    default_mode: "inline",
+    events: true,
+  },
+  "tabnine-cli": {
+    name: "Tabnine CLI",
+    npx_agent: "tabnine-cli",
+    skills_dir: ".tabnine/agent/skills",
+    global_skills_dir: "~/.tabnine/agent/skills",
+    commands_dir: ".tabnine/agent/commands",
+    commands_ext: ".toml",
+    args_placeholder: "{{args}}",
+    format: "toml",
+    default_mode: "inline",
+    events: true,
+  },
+  // ── YAML command agents ──────────────────────────────────────────────
+  goose: {
+    name: "Goose",
+    npx_agent: "goose",
+    skills_dir: ".goose/skills",
+    global_skills_dir: "~/.config/goose/skills",
+    commands_dir: ".goose/recipes",
+    commands_ext: ".yaml",
+    args_placeholder: "{{args}}",
+    format: "yaml",
+    default_mode: "inline",
+    events: false,
+  },
+  // ── Generic fallback ─────────────────────────────────────────────────
+  generic: {
+    name: "Generic (custom commands dir)",
+    npx_agent: "universal",
+    skills_dir: ".agents/skills",
+    global_skills_dir: "~/.config/agents/skills",
+    commands_dir: null,
+    commands_ext: ".md",
+    args_placeholder: "$ARGUMENTS",
+    format: "markdown",
+    default_mode: "inline",
+    events: false,
+  },
+};
+
+export const GENERATED_HEADER = "<!-- generated by adlc-agents-cli";
+export const GENERATED_TEXT = "generated by adlc-agents-cli";
+export const SOURCE_MARKER = "source:";
+
+export function getAgent(key) {
+  return AGENTS[key] || null;
+}
+
+export function getEventAgents() {
+  return Object.entries(AGENTS)
+    .filter(([, a]) => a.events)
+    .map(([key, a]) => ({ key, ...a }));
+}
+
+export function getCommandAgents() {
+  return Object.entries(AGENTS)
+    .filter(([key]) => key !== "generic")
+    .map(([key, a]) => ({ key, ...a }));
+}
+
+export function resolveNpxAgent(agent) {
+  const entry = AGENTS[agent];
+  if (!entry) return null;
+  return entry.npx_agent || "universal";
+}
+
+// ── Events ─────────────────────────────────────────────────────────────
+// Canonical event names (snake_case). The dispatcher and .events.json use
+// these. Each agent adapter translates them to the agent's native casing.
+
+export const CANONICAL_EVENTS = [
+  "session_start",
+  "pre_tool_use",
+  "post_tool_use",
+  "session_end",
+  "user_prompt_submit",
+  "stop",
+];
+
+// Events where the body-injection path (superpowers model) applies.
+// Script path (spec-kit model) applies to ALL events.
+export const BODY_INJECTION_EVENTS = new Set(["session_start", "user_prompt_submit"]);
+
+// Per-agent event configuration metadata. Agents that support native hooks
+// declare: config_file (where native hooks live), format (how to merge),
+// canonical_to_native (event name translation), timeout_unit (s or ms).
+export const EVENT_AGENTS = {
+  opencode: {
+    config_file: ".opencode/plugin/adlc-agents-events.ts",
+    format: "ts-plugin",
+    canonical_to_native: {
+      session_start: "session.start",
+      pre_tool_use: "tool.execute.before",
+      post_tool_use: "tool.execute.after",
+      session_end: "session.end",
+      user_prompt_submit: "chat.message",
+      stop: "session.end",
+    },
+    timeout_unit: "s",
+  },
+  "claude-code": {
+    config_file: ".claude/settings.json",
+    format: "json-nested",
+    merge_key: "hooks",
+    canonical_to_native: {
+      session_start: "SessionStart",
+      pre_tool_use: "PreToolUse",
+      post_tool_use: "PostToolUse",
+      session_end: "SessionEnd",
+      user_prompt_submit: "UserPromptSubmit",
+      stop: "Stop",
+    },
+    timeout_unit: "s",
+  },
+  cursor: {
+    config_file: ".cursor/hooks.json",
+    format: "json-nested",
+    merge_key: "hooks",
+    canonical_to_native: {
+      session_start: "sessionStart",
+      pre_tool_use: "preToolUse",
+      post_tool_use: "postToolUse",
+      session_end: "sessionEnd",
+      user_prompt_submit: "beforeSubmitPrompt",
+      stop: "stop",
+    },
+    timeout_unit: "s",
+  },
+  "github-copilot": {
+    config_file: ".github/hooks/adlc-agents.json",
+    format: "copilot-json",
+    canonical_to_native: {
+      session_start: "sessionStart",
+      pre_tool_use: "preToolUse",
+      post_tool_use: "postToolUse",
+      session_end: "sessionEnd",
+      user_prompt_submit: "userPromptSubmitted",
+      stop: "agentStop",
+    },
+    timeout_unit: "s",
+  },
+  codex: {
+    config_file: ".codex/config.toml",
+    format: "toml",
+    canonical_to_native: {
+      session_start: "SessionStart",
+      pre_tool_use: "PreToolUse",
+      post_tool_use: "PostToolUse",
+      session_end: "SessionEnd",
+      user_prompt_submit: "UserPromptSubmit",
+      stop: "Stop",
+    },
+    timeout_unit: "s",
+  },
+  "gemini-cli": {
+    config_file: ".gemini/settings.json",
+    format: "json-nested",
+    merge_key: "hooks",
+    canonical_to_native: {
+      session_start: "SessionStart",
+      pre_tool_use: "BeforeTool",
+      post_tool_use: "AfterTool",
+      session_end: "SessionEnd",
+      user_prompt_submit: "BeforeAgent",
+      stop: "AfterAgent",
+    },
+    timeout_unit: "ms",
+  },
+  "qwen-code": {
+    config_file: ".qwen/settings.json",
+    format: "json-nested",
+    merge_key: "hooks",
+    canonical_to_native: {
+      session_start: "SessionStart",
+      pre_tool_use: "PreToolUse",
+      post_tool_use: "PostToolUse",
+      session_end: "SessionEnd",
+      user_prompt_submit: "UserPromptSubmit",
+      stop: "Stop",
+    },
+    timeout_unit: "ms",
+  },
+  devin: {
+    config_file: ".devin/hooks.v1.json",
+    format: "json-root-nested",
+    canonical_to_native: {
+      session_start: "SessionStart",
+      pre_tool_use: "PreToolUse",
+      post_tool_use: "PostToolUse",
+      session_end: "SessionEnd",
+      user_prompt_submit: "UserPromptSubmit",
+      stop: "Stop",
+    },
+    timeout_unit: "s",
+  },
+  "tabnine-cli": {
+    config_file: ".tabnine/agent/settings.json",
+    format: "json-nested",
+    merge_key: "hooks",
+    canonical_to_native: {
+      session_start: "SessionStart",
+      pre_tool_use: "BeforeTool",
+      post_tool_use: "AfterTool",
+      session_end: "SessionEnd",
+      user_prompt_submit: "BeforeAgent",
+      stop: "AfterAgent",
+    },
+    timeout_unit: "ms",
+  },
+};
+
+export function getEventAgentConfig(agentKey) {
+  return EVENT_AGENTS[agentKey] || null;
+}
+
+export function getEventCapableAgents() {
+  return Object.keys(EVENT_AGENTS);
+}
+
+// Marker injected into every native hook entry we generate, so idempotent
+// merge and surgical teardown can identify our entries without a manifest DB.
+export const EVENT_MARKER = "_adlc_agents_cli";
+
+// Path where the generic dispatcher is shipped inside a project.
+export const DISPATCHER_REL = ".agents/dispatcher.mjs";
