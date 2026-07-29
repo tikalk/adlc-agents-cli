@@ -185,7 +185,9 @@ function resolveScriptArgv(scriptsField, skillDir) {
   }
   // sh: direct on POSIX; bash launcher on Windows.
   if (process.platform === "win32") {
-    return ["bash", scriptPath, ...rest];
+    // Git Bash treats backslashes as escape characters, so normalize the
+    // script path to forward slashes (bash accepts D:/a/.../boot.sh).
+    return ["bash", scriptPath.replace(/\\/g, "/"), ...rest];
   }
   return [scriptPath, ...rest];
 }

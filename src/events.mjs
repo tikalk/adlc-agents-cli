@@ -11,7 +11,8 @@
 //   - Body path (superpowers): no scripts → output skill body → stdout
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, lstatSync, realpathSync, rmSync } from "node:fs";
-import { join, dirname, resolve, relative } from "node:path";
+import { join, dirname, resolve, relative, isAbsolute } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   EVENT_AGENTS,
   EVENT_MARKER,
@@ -27,7 +28,7 @@ const MARKER = `${GENERATED_TEXT}; ${SOURCE_MARKER} adlc-events`;
 // ── Dispatcher installation ─────────────────────────────────────────────
 
 export function getDispatcherContent() {
-  return readFileSync(join(dirname(new URL(import.meta.url).pathname), "dispatcher.mjs"), "utf-8");
+  return readFileSync(join(dirname(fileURLToPath(import.meta.url)), "dispatcher.mjs"), "utf-8");
 }
 
 export function installDispatcher(projectRoot) {
@@ -634,21 +635,45 @@ function parseJsonPreserving(raw) {
 // ── Safety: safe-destination validation (spec-kit #12) ──────────────────
 
 function validateSafeDestination(targetPath, projectRoot) {
-  let realTarget;
+  // Canonicalize the root once (resolves symlinks, e.g. macOS /var → /private/var).
   let realRoot;
   try {
-    // Resolve the target's parent dir (target doesn't exist yet for new files).
-    const parentDir = dirname(targetPath);
-    const realParent = existsSync(parentDir) ? realpathSync(parentDir) : resolve(parentDir);
-    realTarget = realParent;
     realRoot = realpathSync(projectRoot);
   } catch {
     return; // can't validate, proceed
   }
 
-  const rel = relative(realRoot, realTarget);
-  // If the resolved target escapes the project root, reject.
-  if (rel.startsWith("..") || resolve(realTarget) === resolve(realRoot) === false && !realTarget.startsWith(realRoot)) {
+  // Build the canonical target relative to the real root. This keeps both
+  // sides on the same realpath basis so symlinked temp dirs (macOS /var)
+  // don't produce false "outside project root" positives.
+  const relTarget = relative(projectRoot, targetPath);
+  let canonicalTarget = relTarget.startsWith("..")
+    ? resolve(targetPath) // already escaping — keep absolute
+    : resolve(realRoot, relTarget);
+
+  // Walk existing ancestors of the target, realpath-ing each, to catch
+  // genuine symlink redirects that point outside the project root (spec-kit #12).
+  // We stop at the first existing ancestor so new-file paths validate against
+  // their real parent rather than the (non-existent) target itself.
+  let check = canonicalTarget;
+  let realAncestor = null;
+  while (check && check !== dirname(check)) {
+    if (existsSync(check)) {
+      try {
+        realAncestor = realpathSync(check);
+      } catch {
+        realAncestor = check;
+      }
+      break;
+    }
+    check = dirname(check);
+  }
+
+  const base = realAncestor || canonicalTarget;
+  const rel = relative(realRoot, base);
+
+  // If the resolved ancestor escapes the project root, reject.
+  if (rel.startsWith("..") || (isAbsolute(rel) && !base.startsWith(realRoot))) {
     throw new Error(`Unsafe destination: ${targetPath} resolves outside project root (possible symlink redirect)`);
   }
 }
