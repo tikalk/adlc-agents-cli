@@ -7,7 +7,7 @@
     "adlc-agents-cli": "bin/adlc-agents-cli.mjs"
   },
   "scripts": {
-    "test": "node --test tests/*.mjs",
+    "test": "node --test",
     "prepublishOnly": "npm test"
   },
   "engines": {
