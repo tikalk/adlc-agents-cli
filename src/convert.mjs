@@ -10,7 +10,7 @@ export function commandFilename(skill, agent, opts = {}) {
 }
 
 export function generateCommand(skill, agent, opts = {}) {
-  const mode = opts.mode || agent.default_mode || "inline";
+  const mode = resolveMode(skill, agent, opts);
   const source = opts.source || "unknown";
 
   switch (agent.format) {
@@ -25,6 +25,17 @@ export function generateCommand(skill, agent, opts = {}) {
   }
 }
 
+function resolveMode(skill, agent, opts) {
+  if (opts.mode) return opts.mode;
+  // User-invoked skills (disable-model-invocation: true) get execution-script
+  // commands on model-capable agents — the model can't be trusted to call the
+  // skill tool, so we inline the body framed as imperative steps.
+  if (skill.invocation === "user" && agent.default_mode === "wrapper") {
+    return "execution";
+  }
+  return agent.default_mode || "inline";
+}
+
 function buildTomlHeader(source) {
   return `# ${GENERATED_TEXT}; ${SOURCE_MARKER} ${source} — do not edit`;
 }
@@ -37,6 +48,30 @@ function buildInlineBody(skill, agent) {
   const baseDir = skill.dir || ".";
   const note = `Base directory for this skill: ${baseDir}\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.`;
   return `${note}\n\n---\n\n${skill.body}`;
+}
+
+// Execution-script body for user-invoked skills. Framing the full skill body
+// as an imperative workflow forces the model to EXECUTE it (not summarize it
+// as documentation). Used when the agent has a skill tool but the skill is
+// user-invoked (disable-model-invocation: true) — the model often won't call
+// skill({name}) on its own, so we inline the body wrapped in an execution
+// directive instead.
+function buildExecutionBody(skill) {
+  const baseDir = skill.dir || ".";
+  const note = `Base directory for this skill: ${baseDir}\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.`;
+  return `<EXTREMELY_IMPORTANT>
+Execute the following workflow for the user. Do not summarize, explain, or describe it — carry out the steps directly, starting with the first step.
+</EXTREMELY_IMPORTANT>
+
+## User Input
+
+$ARGUMENTS
+
+${note}
+
+---
+
+${skill.body}`;
 }
 
 function buildWrapperBody(skill) {
@@ -97,24 +132,32 @@ function buildArgsLine(agent) {
 function generateMarkdown(skill, agent, mode, source, opts) {
   const header = `${GENERATED_HEADER}; ${SOURCE_MARKER} ${source} — do not edit -->`;
   const description = skill.description || `Invoke the ${skill.name} skill`;
-  const body = mode === "wrapper" ? buildWrapperBody(skill) : buildInlineBody(skill, agent);
+  const body = buildBody(skill, agent, mode);
 
   let content = `---\ndescription: ${escapeYamlValue(description)}\n---\n\n${header}\n\n${body}`;
 
-  if (mode === "wrapper" || !skill.body.includes("$ARGUMENTS")) {
+  // Wrapper needs $ARGUMENTS appended; execution already includes it; inline
+  // appends it only if the body doesn't reference it.
+  if (mode === "wrapper" || (mode === "inline" && !skill.body.includes("$ARGUMENTS"))) {
     content += buildArgsLine(agent);
   }
 
   return content + "\n";
 }
 
+function buildBody(skill, agent, mode) {
+  if (mode === "execution") return buildExecutionBody(skill);
+  if (mode === "wrapper") return buildWrapperBody(skill);
+  return buildInlineBody(skill, agent);
+}
+
 function generateToml(skill, agent, mode, source, opts) {
   const header = buildTomlHeader(source);
   const description = skill.description || `Invoke the ${skill.name} skill`;
-  const body = mode === "wrapper" ? buildWrapperBody(skill) : buildInlineBody(skill, agent);
+  const body = buildBody(skill, agent, mode);
 
   let promptBody = body;
-  if (mode === "wrapper" || !body.includes("{{args}}")) {
+  if (mode === "wrapper" || (mode === "inline" && !body.includes("{{args}}"))) {
     promptBody += buildArgsLine(agent);
   }
 
@@ -127,10 +170,10 @@ function generateToml(skill, agent, mode, source, opts) {
 function generateYaml(skill, agent, mode, source, opts) {
   const header = buildYamlHeader(source);
   const description = skill.description || `Invoke the ${skill.name} skill`;
-  const body = mode === "wrapper" ? buildWrapperBody(skill) : buildInlineBody(skill, agent);
+  const body = buildBody(skill, agent, mode);
 
   let promptBody = body;
-  if (mode === "wrapper" || !body.includes("{{args}}")) {
+  if (mode === "wrapper" || (mode === "inline" && !body.includes("{{args}}"))) {
     promptBody += buildArgsLine(agent);
   }
 

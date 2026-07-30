@@ -61,7 +61,19 @@ async function loadSkill(skillPath) {
     path: skillPath,
     dir: dirname(skillPath),
     frontmatter,
+    invocation: resolveInvocation(frontmatter),
   };
+}
+
+function resolveInvocation(frontmatter) {
+  if (frontmatter["disable-model-invocation"] === "true" || frontmatter["disable-model-invocation"] === true) {
+    return "user";
+  }
+  if (frontmatter["model-invocation"] === "true" || frontmatter["model-invocation"] === true) {
+    return "model";
+  }
+  // Default: skills without the flag are model-invoked (agent can trigger them).
+  return "model";
 }
 
 export function expandTilde(p) {

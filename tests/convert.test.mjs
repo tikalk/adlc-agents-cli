@@ -11,6 +11,24 @@ const mockSkill = {
   frontmatter: { name: "team-setup", description: "Clone, scaffold, or configure a team AI directives repository" },
 };
 
+const mockUserInvokedSkill = {
+  name: "team-setup",
+  description: "Clone, scaffold, or configure a team AI directives repository",
+  body: "# Team Setup\n\n## Overview\n\nSet up team directives.\n\n## Core Process\n\nStep 1: Present options.",
+  dir: "/project/.agents/skills/team-setup",
+  frontmatter: { name: "team-setup", "disable-model-invocation": "true" },
+  invocation: "user",
+};
+
+const mockModelInvokedSkill = {
+  name: "team-boot",
+  description: "Bootstrap session",
+  body: "# team-boot\n\nBootstrap.",
+  dir: "/project/.agents/skills/team-boot",
+  frontmatter: { name: "team-boot" },
+  invocation: "model",
+};
+
 describe("Command generation — Markdown", () => {
   it("generates inline markdown command with frontmatter", () => {
     const agent = getAgent("opencode");
@@ -62,6 +80,44 @@ describe("Command generation — Markdown", () => {
   it("generates .mdc for firebender", () => {
     const agent = getAgent("firebender");
     assert.equal(commandFilename(mockSkill, agent, {}), "team-setup.mdc");
+  });
+});
+
+describe("Command generation — Execution mode (user-invoked skills)", () => {
+  it("user-invoked skill on model-capable agent gets execution script", () => {
+    const agent = getAgent("opencode"); // default_mode: wrapper
+    const content = generateCommand(mockUserInvokedSkill, agent, { source: "test" });
+
+    assert.ok(content.includes("<EXTREMELY_IMPORTANT>"), "Execution directive present");
+    assert.ok(content.includes("Execute the following workflow"), "Execute instruction present");
+    assert.ok(content.includes("## User Input"), "User Input section present");
+    assert.ok(content.includes("$ARGUMENTS"), "$ARGUMENTS present");
+    assert.ok(content.includes("# Team Setup"), "Full skill body present");
+    assert.ok(content.includes("## Core Process"), "Process section preserved");
+  });
+
+  it("model-invoked skill on model-capable agent stays wrapper", () => {
+    const agent = getAgent("opencode"); // default_mode: wrapper
+    const content = generateCommand(mockModelInvokedSkill, agent, { source: "test" });
+
+    assert.ok(content.includes("Invoke the `team-boot` skill."), "Wrapper directive present");
+    assert.ok(!content.includes("<EXTREMELY_IMPORTANT>"), "No execution directive for model-invoked");
+  });
+
+  it("user-invoked skill on command-only agent stays inline (full body, no directive)", () => {
+    const agent = getAgent("amp"); // default_mode: inline
+    const content = generateCommand(mockUserInvokedSkill, agent, { source: "test" });
+
+    assert.ok(content.includes("# Team Setup"), "Full body inlined");
+    assert.ok(!content.includes("<EXTREMELY_IMPORTANT>"), "No execution directive for command-only (uses plain inline)");
+  });
+
+  it("explicit mode override takes precedence over invocation type", () => {
+    const agent = getAgent("opencode");
+    const content = generateCommand(mockUserInvokedSkill, agent, { mode: "wrapper", source: "test" });
+
+    assert.ok(content.includes("Invoke the `team-setup` skill."), "Wrapper override respected");
+    assert.ok(!content.includes("<EXTREMELY_IMPORTANT>"), "No execution directive when wrapper forced");
   });
 });
 
