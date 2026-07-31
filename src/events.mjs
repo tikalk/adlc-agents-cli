@@ -184,7 +184,7 @@ function buildOpenCodeHooks(resolvedEvents, skillsDir, agentConfig) {
     for (const h of handlers) {
       // Different opencode hooks have different output shapes:
       // - experimental.chat.system.transform: output.system.push(string)
-      // - chat.message: output.parts.push({ type: "text", text: string })
+      // - chat.message: output.parts.push(TextPart) — requires id/sessionID/messageID
       // - tool.execute.before/after: output.args (not context injection)
       if (nativeEvent === "experimental.chat.system.transform") {
         entries.push(`    "${nativeEvent}": async (_input, output) => {
@@ -192,9 +192,9 @@ function buildOpenCodeHooks(resolvedEvents, skillsDir, agentConfig) {
       if (ctx) output.system.push(ctx)
     }`);
       } else if (nativeEvent === "chat.message") {
-        entries.push(`    "${nativeEvent}": async (_input, output) => {
+        entries.push(`    "${nativeEvent}": async (input, output) => {
       const ctx = runEvent("${h.skill}", "${canonicalEvent}", ${h.timeout})
-      if (ctx) output.parts.push({ type: "text", text: ctx })
+      if (ctx) output.parts.push({ id: "adlc_" + Date.now() + "_" + Math.random().toString(36).slice(2, 10), sessionID: input.sessionID, messageID: output.message.id, type: "text", text: ctx, synthetic: true })
     }`);
       } else {
         // Generic fallback for tool.execute.before/after etc.
