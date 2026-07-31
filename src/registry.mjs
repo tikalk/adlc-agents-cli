@@ -2,6 +2,16 @@
 // Each entry declares where npx skills installs SKILL.md files (skills_dir),
 // where we generate command files (commands_dir), the file format, and whether
 // the agent supports session_start context-injection events.
+//
+// ── user_invoked_mode ──────────────────────────────────────────────────
+// For user-invoked skills (disable-model-invocation: true) on wrapper-default
+// agents, `user_invoked_mode` picks the command body strategy:
+//   "wrapper"   — thin "Invoke the X skill." command (opencode). The skill is
+//                 in <available_skills> (opencode ignores the flag), so the
+//                 model calls skill({name}) and the skill loads via the tool.
+//   "execution" — inline the full body as imperative steps (default). Used
+//                 when the agent respects disable-model-invocation (claude-code
+//                 hides such skills from the model, so a skill-tool call fails).
 
 export const AGENTS = {
   // ── Markdown command agents ──────────────────────────────────────────
@@ -16,6 +26,7 @@ export const AGENTS = {
     format: "markdown",
     default_mode: "wrapper",
     events: true,
+    user_invoked_mode: "wrapper",
   },
   "claude-code": {
     name: "Claude Code",

@@ -55,7 +55,7 @@ adlc-agents-cli add <source> -a <agent>
 | `-g, --global` | Install to user directory instead of project |
 | `--no-events` | Skip event config generation |
 | `--prefix <str>` | Namespace command filenames (e.g., `adlc.team-setup.md`) |
-| `--mode <mode>` | `inline` (default, embeds full skill body) or `wrapper` (references skill by name) |
+| `--mode <mode>` | `inline` (default, embeds full skill body) or `wrapper` (references skill by name). |
 | `--skill <name>` | Install/generate for one skill only (use `'*'` for all) |
 | `--copy` | Copy files instead of symlinking (passthrough to `npx skills`) |
 | `-y, --yes` | Skip confirmation prompts |
@@ -120,6 +120,28 @@ description: Clone, scaffold, or configure a team AI directives repository
 Invoke the `team-setup` skill.
 
 $ARGUMENTS
+```
+
+## User-invoked skills: wrapper vs execution mode
+
+User-invoked skills (`disable-model-invocation: true` in frontmatter) are meant to be triggered explicitly, not auto-invoked by the model. On wrapper-default agents (those with a `skill` tool), the command body strategy is chosen per agent via `user_invoked_mode`:
+
+| `user_invoked_mode` | Used by | Command body | Why |
+|---------------------|---------|--------------|-----|
+| `"wrapper"` | `opencode` | `Invoke the \`team-setup\` skill.` + summary | opencode **ignores** `disable-model-invocation` — the skill stays in `<available_skills>` and loads via the `skill` tool. The wrapper command tells the model to invoke it, and it can. |
+| `"execution"` (default) | `claude-code`, cursor, copilot, codex | Full body inlined, framed as imperative steps | These agents **respect** `disable-model-invocation` — the skill is hidden from the model, so `skill({name})` would fail. Inlining the body is the only working path. |
+
+For opencode, `/team-setup` expands to the wrapper text, the model sees `team-setup` in `<available_skills>`, and calls `skill({ name: "team-setup" })` — the skill loads via the tool with full progressive disclosure (base dir + sampled files, invocation visible in traces).
+
+## Install
+
+```bash
+# One-off (no install needed)
+npx adlc-agents-cli add tikalk/adlc-team-skills -a opencode
+
+# Install as global binary → adlc-agents-cli available everywhere
+npm install -g adlc-agents-cli
+adlc-agents-cli add tikalk/adlc-team-skills -a opencode
 ```
 
 ## Events: lifecycle hooks

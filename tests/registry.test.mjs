@@ -63,4 +63,12 @@ describe("Registry integrity", () => {
     const cmdAgents = getCommandAgents();
     assert.ok(cmdAgents.length >= 20, `Expected at least 20 command agents, got ${cmdAgents.length}`);
   });
+
+  it("opencode uses wrapper mode for user-invoked skills (ignores disable-model-invocation)", () => {
+    assert.equal(getAgent("opencode").user_invoked_mode, "wrapper", "opencode skills stay in available_skills → wrapper invokes via skill tool");
+  });
+
+  it("claude-code has no user_invoked_mode (defaults to execution)", () => {
+    assert.ok(!getAgent("claude-code").user_invoked_mode, "claude-code respects the flag → execution fallback");
+  });
 });

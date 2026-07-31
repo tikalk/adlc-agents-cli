@@ -5,7 +5,7 @@ import { writeFileSync, readFileSync, mkdirSync, existsSync, rmSync, readdirSync
 import { join, resolve, dirname } from "node:path";
 import { AGENTS, resolveNpxAgent, getAgent, GENERATED_HEADER, EVENT_AGENTS, getEventAgentConfig } from "./registry.mjs";
 import { findInstalledSkills, detectAdlc, expandTilde } from "./source.mjs";
-import { generateCommand, commandFilename, isGenerated } from "./convert.mjs";
+import { generateCommand, commandFilename, isGenerated, removeGeneratedCommands } from "./convert.mjs";
 import {
   installDispatcher,
   installEvents,
@@ -215,19 +215,7 @@ async function cmdRemove(args, flags) {
     if (!commandsDir) continue;
 
     const absCommandsDir = resolve(projectRoot, expandTilde(commandsDir));
-    if (!existsSync(absCommandsDir)) continue;
-
-    let removed = 0;
-    const entries = readdirSync(absCommandsDir);
-    for (const entry of entries) {
-      const filepath = join(absCommandsDir, entry);
-      if (!statSync(filepath).isFile()) continue;
-      const content = readFileSync(filepath, "utf-8");
-      if (isGenerated(content)) {
-        rmSync(filepath);
-        removed++;
-      }
-    }
+    const removed = removeGeneratedCommands(absCommandsDir);
 
     if (removed > 0) {
       console.log(`${agent.name}: removed ${removed} command file(s)`);
@@ -392,6 +380,10 @@ FLAGS:
   --skill <name>     Install/generate for one skill only (use '*' for all)
   --copy             Copy files instead of symlinking (passthrough to npx skills)
   -y, --yes          Skip confirmation prompts
+
+INSTALL:
+  npx adlc-agents-cli add ...     one-off (no install needed)
+  npm install -g adlc-agents-cli  install as global binary → adlc-agents-cli add ...
 
 EXAMPLES:
   adlc-agents-cli add tikalk/adlc-team-skills -a opencode

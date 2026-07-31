@@ -83,9 +83,9 @@ describe("Command generation — Markdown", () => {
   });
 });
 
-describe("Command generation — Execution mode (user-invoked skills)", () => {
-  it("user-invoked skill on model-capable agent gets execution script", () => {
-    const agent = getAgent("opencode"); // default_mode: wrapper
+describe("Command generation — Execution mode (claude-code user-invoked skills)", () => {
+  it("user-invoked skill on claude-code gets execution script (model can't invoke user skills)", () => {
+    const agent = getAgent("claude-code"); // default_mode: wrapper, no user_invoked_mode → execution
     const content = generateCommand(mockUserInvokedSkill, agent, { source: "test" });
 
     assert.ok(content.includes("<EXTREMELY_IMPORTANT>"), "Execution directive present");
@@ -96,28 +96,12 @@ describe("Command generation — Execution mode (user-invoked skills)", () => {
     assert.ok(content.includes("## Core Process"), "Process section preserved");
   });
 
-  it("model-invoked skill on model-capable agent stays wrapper", () => {
-    const agent = getAgent("opencode"); // default_mode: wrapper
-    const content = generateCommand(mockModelInvokedSkill, agent, { source: "test" });
-
-    assert.ok(content.includes("Invoke the `team-boot` skill."), "Wrapper directive present");
-    assert.ok(!content.includes("<EXTREMELY_IMPORTANT>"), "No execution directive for model-invoked");
-  });
-
   it("user-invoked skill on command-only agent stays inline (full body, no directive)", () => {
     const agent = getAgent("amp"); // default_mode: inline
     const content = generateCommand(mockUserInvokedSkill, agent, { source: "test" });
 
     assert.ok(content.includes("# Team Setup"), "Full body inlined");
     assert.ok(!content.includes("<EXTREMELY_IMPORTANT>"), "No execution directive for command-only (uses plain inline)");
-  });
-
-  it("explicit mode override takes precedence over invocation type", () => {
-    const agent = getAgent("opencode");
-    const content = generateCommand(mockUserInvokedSkill, agent, { mode: "wrapper", source: "test" });
-
-    assert.ok(content.includes("Invoke the `team-setup` skill."), "Wrapper override respected");
-    assert.ok(!content.includes("<EXTREMELY_IMPORTANT>"), "No execution directive when wrapper forced");
   });
 });
 
@@ -170,5 +154,42 @@ describe("Generated file detection", () => {
     const agent = getAgent("opencode");
     const content = generateCommand(mockSkill, agent, { source: "tikalk/adlc-team-skills" });
     assert.equal(extractSource(content), "tikalk/adlc-team-skills");
+  });
+});
+
+describe("Command generation — opencode user-invoked skills (wrapper)", () => {
+  it("opencode user-invoked skill gets wrapper (skill is in available_skills)", () => {
+    const agent = getAgent("opencode"); // user_invoked_mode: "wrapper"
+    const content = generateCommand(mockUserInvokedSkill, agent, { source: "test" });
+
+    assert.ok(content.includes("Invoke the `team-setup` skill."), "Wrapper directive present");
+    assert.ok(!content.includes("<EXTREMELY_IMPORTANT>"), "No execution/invoke directive");
+    assert.ok(!content.includes("## Core Process"), "Full skill body NOT inlined");
+    assert.ok(content.includes("$ARGUMENTS"), "$ARGUMENTS present");
+  });
+
+  it("claude-code user-invoked skill gets execution (model can't invoke user skills)", () => {
+    const agent = getAgent("claude-code"); // no user_invoked_mode → execution
+    const content = generateCommand(mockUserInvokedSkill, agent, { source: "test" });
+
+    assert.ok(content.includes("<EXTREMELY_IMPORTANT>"), "Execution directive present");
+    assert.ok(content.includes("# Team Setup"), "Full skill body inlined");
+    assert.ok(!content.includes("Invoke the `team-setup` skill."), "No wrapper for claude-code user-invoked");
+  });
+
+  it("model-invoked skill on opencode stays wrapper", () => {
+    const agent = getAgent("opencode");
+    const content = generateCommand(mockModelInvokedSkill, agent, { source: "test" });
+
+    assert.ok(content.includes("Invoke the `team-boot` skill."), "Wrapper directive present");
+    assert.ok(!content.includes("<EXTREMELY_IMPORTANT>"), "No execution directive for model-invoked");
+  });
+
+  it("explicit mode override takes precedence over user_invoked_mode", () => {
+    const agent = getAgent("opencode");
+    const content = generateCommand(mockUserInvokedSkill, agent, { mode: "execution", source: "test" });
+
+    assert.ok(content.includes("<EXTREMELY_IMPORTANT>"), "Execution override respected");
+    assert.ok(content.includes("# Team Setup"), "Full body inlined when execution forced");
   });
 });

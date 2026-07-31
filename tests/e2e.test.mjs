@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { findInstalledSkills, detectAdlc } from "../src/source.mjs";
-import { generateCommand, commandFilename, isGenerated } from "../src/convert.mjs";
+import { generateCommand, commandFilename, isGenerated, removeGeneratedCommands } from "../src/convert.mjs";
 import { getAgent } from "../src/registry.mjs";
 
 function createTestProject() {
@@ -137,5 +137,42 @@ describe("E2E: ADLC detection", () => {
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
+  });
+});
+
+describe("E2E: removeGeneratedCommands — native-skills legacy cleanup", () => {
+  it("deletes only marker-matched generated files, preserves user files", () => {
+    const dir = mkdtempSync(join(tmpdir(), "adlc-cleanup-"));
+
+    try {
+      const commandsDir = join(dir, ".opencode", "commands");
+      mkdirSync(commandsDir, { recursive: true });
+
+      const agent = getAgent("opencode");
+      // Two generated command files (CLI-owned)
+      for (const name of ["team-setup", "mission-brief"]) {
+        const skill = { name, description: `desc ${name}`, body: `# ${name}`, dir: join(dir, ".agents", "skills", name), frontmatter: { name } };
+        writeFileSync(join(commandsDir, commandFilename(skill, agent, {})), generateCommand(skill, agent, { source: "test" }), "utf-8");
+      }
+      // A user-authored command file (no generated header) — must be preserved
+      writeFileSync(join(commandsDir, "my-custom.md"), "# My custom command\n\nDo something.", "utf-8");
+      // A non-generated file sharing the skill name is impossible by design, but
+      // ensure a subdirectory is left alone too
+      mkdirSync(join(commandsDir, "subdir"), { recursive: true });
+
+      const removed = removeGeneratedCommands(commandsDir);
+
+      assert.equal(removed, 2, "removed exactly the 2 generated files");
+      assert.ok(!existsSync(join(commandsDir, "team-setup.md")), "generated file deleted");
+      assert.ok(!existsSync(join(commandsDir, "mission-brief.md")), "generated file deleted");
+      assert.ok(existsSync(join(commandsDir, "my-custom.md")), "user file preserved");
+      assert.ok(existsSync(join(commandsDir, "subdir")), "subdir preserved");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns 0 when commands dir does not exist", () => {
+    assert.equal(removeGeneratedCommands(join(tmpdir(), "definitely-not-present-xyz")), 0);
   });
 });

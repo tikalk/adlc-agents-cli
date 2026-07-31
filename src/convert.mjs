@@ -2,7 +2,26 @@
 // in the target agent's native format (markdown, toml, yaml).
 // Supports inline mode (embeds full skill body) and wrapper mode (references skill).
 
+import { existsSync, readdirSync, readFileSync, statSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { GENERATED_HEADER, GENERATED_TEXT, SOURCE_MARKER } from "./registry.mjs";
+
+// Delete every CLI-generated command file in a directory (marker-matched only;
+// user-created files are preserved). Shared by `remove` and `upgrade`. Returns
+// the number of files removed.
+export function removeGeneratedCommands(absCommandsDir) {
+  let removed = 0;
+  if (!absCommandsDir || !existsSync(absCommandsDir)) return removed;
+  for (const entry of readdirSync(absCommandsDir)) {
+    const filepath = join(absCommandsDir, entry);
+    if (!statSync(filepath).isFile()) continue;
+    if (isGenerated(readFileSync(filepath, "utf-8"))) {
+      rmSync(filepath);
+      removed++;
+    }
+  }
+  return removed;
+}
 
 export function commandFilename(skill, agent, opts = {}) {
   const prefix = opts.prefix ? `${opts.prefix}.` : "";
@@ -27,11 +46,13 @@ export function generateCommand(skill, agent, opts = {}) {
 
 function resolveMode(skill, agent, opts) {
   if (opts.mode) return opts.mode;
-  // User-invoked skills (disable-model-invocation: true) get execution-script
-  // commands on model-capable agents — the model can't be trusted to call the
-  // skill tool, so we inline the body framed as imperative steps.
+  // User-invoked skills (disable-model-invocation: true) get a special command
+  // body on wrapper-default agents. `user_invoked_mode` picks the strategy:
+  // "wrapper" (opencode ignores the flag → skill is in <available_skills> →
+  // model calls skill({name})) or "execution" (claude-code respects the flag
+  // → skill hidden from model → inline the body as imperative steps).
   if (skill.invocation === "user" && agent.default_mode === "wrapper") {
-    return "execution";
+    return agent.user_invoked_mode || "execution";
   }
   return agent.default_mode || "inline";
 }
@@ -52,10 +73,9 @@ function buildInlineBody(skill, agent) {
 
 // Execution-script body for user-invoked skills. Framing the full skill body
 // as an imperative workflow forces the model to EXECUTE it (not summarize it
-// as documentation). Used when the agent has a skill tool but the skill is
-// user-invoked (disable-model-invocation: true) — the model often won't call
-// skill({name}) on its own, so we inline the body wrapped in an execution
-// directive instead.
+// as documentation). Used when the agent respects disable-model-invocation
+// (e.g. claude-code hides such skills from the model, so a skill-tool call
+// would fail) — the inlined body is the only working path.
 function buildExecutionBody(skill) {
   const baseDir = skill.dir || ".";
   const note = `Base directory for this skill: ${baseDir}\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.`;
