@@ -141,6 +141,69 @@ describe("Events: opencode plugin generation", () => {
       rmSync(projectRoot, { recursive: true, force: true });
     }
   });
+
+  it("chat.message builds a schema-valid TextPart (id/sessionID/messageID)", () => {
+    const projectRoot = createTestProject(false);
+    try {
+      const agentConfig = getEventAgentConfig("opencode");
+      const resolved = resolveEvents(SAMPLE_MANIFEST, agentConfig);
+      installEvents("opencode", projectRoot, resolved, ".agents/skills");
+      const content = readFileSync(join(projectRoot, ".opencode/plugin/adlc-agents-events.ts"), "utf-8");
+
+      const chatMessage = content.match(/"chat\.message": async \(input, output\) => \{([\s\S]*?)\n    \}/);
+      assert.ok(chatMessage, "chat.message handler present");
+      assert.ok(chatMessage[1].includes("output.parts.push"), "pushes to output.parts");
+      assert.ok(chatMessage[1].includes("sessionID: input.sessionID"), "sessionID from input");
+      assert.ok(chatMessage[1].includes("messageID: output.message.id"), "messageID from output.message");
+      assert.ok(chatMessage[1].includes('type: "text"'), "type is text");
+      assert.ok(chatMessage[1].includes("synthetic: true"), "synthetic flag set");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("chat.message part id is runtime-derived, not a fixed prt_ literal", () => {
+    const projectRoot = createTestProject(false);
+    try {
+      const agentConfig = getEventAgentConfig("opencode");
+      const resolved = resolveEvents(SAMPLE_MANIFEST, agentConfig);
+      installEvents("opencode", projectRoot, resolved, ".agents/skills");
+      const content = readFileSync(join(projectRoot, ".opencode/plugin/adlc-agents-events.ts"), "utf-8");
+
+      const chatMessage = content.match(/"chat\.message": async \(input, output\) => \{([\s\S]*?)\n    \}/);
+      assert.ok(chatMessage, "chat.message handler present");
+      // Derives base from the last existing part so the prt brand survives
+      // opencode prefix changes; "prt_" only as the empty-parts fallback.
+      assert.ok(chatMessage[1].includes("output.parts[output.parts.length - 1]?.id"), "base derived from last part");
+      assert.ok(chatMessage[1].includes('?? "prt_"'), "prt_ kept as fallback");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("both hooks degrade gracefully with try/catch, never rethrow", () => {
+    const projectRoot = createTestProject(false);
+    try {
+      const agentConfig = getEventAgentConfig("opencode");
+      const resolved = resolveEvents(SAMPLE_MANIFEST, agentConfig);
+      installEvents("opencode", projectRoot, resolved, ".agents/skills");
+      const content = readFileSync(join(projectRoot, ".opencode/plugin/adlc-agents-events.ts"), "utf-8");
+
+      const systemTransform = content.match(/"experimental\.chat\.system\.transform": async \(_input, output\) => \{([\s\S]*?)\n    \}/);
+      assert.ok(systemTransform, "system.transform handler present");
+      assert.ok(systemTransform[1].includes("try {"), "system.transform wrapped in try");
+      assert.ok(systemTransform[1].includes("console.error"), "system.transform catches and logs");
+      assert.ok(!systemTransform[1].includes("throw"), "system.transform never rethrows");
+
+      const chatMessage = content.match(/"chat\.message": async \(input, output\) => \{([\s\S]*?)\n    \}/);
+      assert.ok(chatMessage, "chat.message handler present");
+      assert.ok(chatMessage[1].includes("try {"), "chat.message wrapped in try");
+      assert.ok(chatMessage[1].includes("console.error"), "chat.message catches and logs");
+      assert.ok(!chatMessage[1].includes("throw"), "chat.message never rethrows");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("Events: Claude Code JSON merge", () => {

@@ -217,8 +217,7 @@ The CLI generates agent-native hook configs that call the dispatcher. Each agent
 
 | Agent | Config file | Format | Timeout unit |
 |-------|------------|--------|-------------|
-| opencode | `.opencode/plugin/adlc-agents-events.ts` | TS plugin | seconds |
-| claude-code | `.claude/settings.json` (merged) | JSON nested | seconds |
+| opencode | `.opencode/plugin/adlc-agents-events.ts` | TS plugin | seconds || claude-code | `.claude/settings.json` (merged) | JSON nested | seconds |
 | cursor | `.cursor/hooks.json` (merged) | JSON nested | seconds |
 | github-copilot | `.github/hooks/adlc-agents.json` | JSON (bash+powershell) | seconds |
 | codex | `.codex/config.toml` (merged) | TOML | seconds |
@@ -226,6 +225,8 @@ The CLI generates agent-native hook configs that call the dispatcher. Each agent
 | qwen-code | `.qwen/settings.json` (merged) | JSON nested | milliseconds |
 | devin | `.devin/hooks.v1.json` (merged) | JSON root-nested | seconds |
 | tabnine-cli | `.tabnine/agent/settings.json` (merged) | JSON nested | milliseconds |
+
+> **opencode compatibility**: the generated TS plugin is verified against opencode **≥ 1.18**. opencode's `Part.id` must start with `prt` (its `Identifier` brand) and hooks must never throw — a schema error or rethrown exception in a plugin crashes the whole session. The plugin derives the injected part's id from the last existing part at runtime (so it inherits opencode's brand even if the prefix changes), falling back to `prt_`, and wraps every hook body in try/catch that logs instead of rethrowing. If you upgrade opencode, re-run `adlc-agents-cli upgrade -a opencode` to regenerate the plugin.
 
 ### Safety patterns (ported from spec-kit)
 

@@ -186,21 +186,41 @@ function buildOpenCodeHooks(resolvedEvents, skillsDir, agentConfig) {
       // - experimental.chat.system.transform: output.system.push(string)
       // - chat.message: output.parts.push(TextPart) — requires id/sessionID/messageID
       // - tool.execute.before/after: output.args (not context injection)
+      //
+      // Every handler degrades gracefully: runEvent failures are caught and
+      // logged, never rethrown, so a broken event can't crash the session.
       if (nativeEvent === "experimental.chat.system.transform") {
         entries.push(`    "${nativeEvent}": async (_input, output) => {
-      const ctx = runEvent("${h.skill}", "${canonicalEvent}", ${h.timeout})
-      if (ctx) output.system.push(ctx)
+      try {
+        const ctx = runEvent("${h.skill}", "${canonicalEvent}", ${h.timeout})
+        if (ctx) output.system.push(ctx)
+      } catch (e) {
+        console.error("adlc system.transform hook failed:", (e as Error).message)
+      }
     }`);
       } else if (nativeEvent === "chat.message") {
+        // Part id must start with "prt" (opencode Identifier brand). Derive it
+        // from the last existing part (keeps the brand even if opencode changes
+        // its prefix), falling back to "prt_" when output.parts is empty.
         entries.push(`    "${nativeEvent}": async (input, output) => {
-      const ctx = runEvent("${h.skill}", "${canonicalEvent}", ${h.timeout})
-      if (ctx) output.parts.push({ id: "prt_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10), sessionID: input.sessionID, messageID: output.message.id, type: "text", text: ctx, synthetic: true })
+      try {
+        const ctx = runEvent("${h.skill}", "${canonicalEvent}", ${h.timeout})
+        if (!ctx) return
+        const base = output.parts[output.parts.length - 1]?.id ?? "prt_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
+        output.parts.push({ id: base + ".adlc" + Math.random().toString(36).slice(2, 8), sessionID: input.sessionID, messageID: output.message.id, type: "text", text: ctx, synthetic: true })
+      } catch (e) {
+        console.error("adlc chat.message hook failed:", (e as Error).message)
+      }
     }`);
       } else {
         // Generic fallback for tool.execute.before/after etc.
         entries.push(`    "${nativeEvent}": async (_input, output) => {
-      const ctx = runEvent("${h.skill}", "${canonicalEvent}", ${h.timeout})
-      if (ctx && output.system) output.system.push(ctx)
+      try {
+        const ctx = runEvent("${h.skill}", "${canonicalEvent}", ${h.timeout})
+        if (ctx && output.system) output.system.push(ctx)
+      } catch (e) {
+        console.error("adlc ${nativeEvent} hook failed:", (e as Error).message)
+      }
     }`);
       }
     }
