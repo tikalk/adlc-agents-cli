@@ -194,7 +194,7 @@ function buildOpenCodeHooks(resolvedEvents, skillsDir, agentConfig) {
       } else if (nativeEvent === "chat.message") {
         entries.push(`    "${nativeEvent}": async (input, output) => {
       const ctx = runEvent("${h.skill}", "${canonicalEvent}", ${h.timeout})
-      if (ctx) output.parts.push({ id: "adlc_" + Date.now() + "_" + Math.random().toString(36).slice(2, 10), sessionID: input.sessionID, messageID: output.message.id, type: "text", text: ctx, synthetic: true })
+      if (ctx) output.parts.push({ id: "prt_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10), sessionID: input.sessionID, messageID: output.message.id, type: "text", text: ctx, synthetic: true })
     }`);
       } else {
         // Generic fallback for tool.execute.before/after etc.
