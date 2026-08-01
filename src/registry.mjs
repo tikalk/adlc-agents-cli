@@ -364,6 +364,46 @@ export const CANONICAL_EVENTS = [
 // Script path (spec-kit model) applies to ALL events.
 export const BODY_INJECTION_EVENTS = new Set(["session_start", "user_prompt_submit"]);
 
+// Context-injection envelope for hook stdout, per agent + canonical event.
+//
+// Not every agent injects a hook's plain-text stdout as model context:
+//   - Claude Code and Codex DO (plain stdout → context on session_start and
+//     user_prompt_submit). No envelope needed.
+//   - Gemini/Tabnine/Qwen/Devin are JSON-only protocols: plain stdout becomes
+//     user-facing noise (Gemini/Tabnine treat it as `systemMessage`), never
+//     context. Injection requires a JSON envelope.
+//   - Copilot CLI discards non-JSON stdout; sessionStart accepts a top-level
+//     `additionalContext` field. Its userPromptSubmitted output is NOT
+//     processed (per-prompt injection impossible).
+//   - Cursor parses stdout as JSON; sessionStart accepts a top-level
+//     `additional_context` (snake_case) field. Its beforeSubmitPrompt output
+//     schema has no context field (per-prompt injection impossible).
+//   - opencode hooks are in-process TS functions (no stdout); the generated
+//     plugin captures dispatcher output and pushes it into hook outputs.
+//
+// Envelope tokens (resolved per event, with "*" as the fallback key):
+//   "hookSpecificOutput" → {"hookSpecificOutput": {"additionalContext": ...}}
+//   "additionalContext"  → {"additionalContext": ...}   (top-level, Copilot)
+//   "additional_context" → {"additional_context": ...}  (top-level, Cursor)
+//   "suppress"           → emit nothing (strict-JSON agents on events whose
+//                          output can't be used — avoids parse errors and
+//                          user-facing systemMessage noise)
+// Absent (no matching key and no "*") → plain stdout passthrough.
+export const CONTEXT_ENVELOPES = {
+  hookSpecificOutput: (text) => JSON.stringify({ hookSpecificOutput: { additionalContext: text } }),
+  additionalContext: (text) => JSON.stringify({ additionalContext: text }),
+  additional_context: (text) => JSON.stringify({ additional_context: text }),
+};
+
+// Resolve the envelope token for an agent + canonical event.
+// Event key wins; "*" is the fallback; undefined → plain passthrough.
+export function resolveEnvelope(agentConfig, canonicalEvent) {
+  const map = agentConfig && agentConfig.context_envelope;
+  if (!map) return undefined;
+  if (canonicalEvent in map) return map[canonicalEvent];
+  return map["*"];
+}
+
 // Per-agent event configuration metadata. Agents that support native hooks
 // declare: config_file (where native hooks live), format (how to merge),
 // canonical_to_native (event name translation), timeout_unit (s or ms).
@@ -415,6 +455,13 @@ export const EVENT_AGENTS = {
       stop: "stop",
     },
     timeout_unit: "s",
+    // Cursor sessionStart: {"additional_context": ...} (top-level, snake_case).
+    // beforeSubmitPrompt has no context output field (block/allow only), and
+    // plain text on any hook fails Cursor's JSON parse — suppress the rest.
+    context_envelope: {
+      "*": "suppress",
+      session_start: "additional_context",
+    },
   },
   "github-copilot": {
     config_file: ".github/hooks/adlc-agents.json",
@@ -428,6 +475,12 @@ export const EVENT_AGENTS = {
       stop: "agentStop",
     },
     timeout_unit: "s",
+    // Copilot sessionStart: {"additionalContext": ...} (top-level).
+    // userPromptSubmitted output is NOT processed (per-prompt injection
+    // impossible); non-JSON stdout is discarded harmlessly — no suppress.
+    context_envelope: {
+      session_start: "additionalContext",
+    },
   },
   codex: {
     config_file: ".codex/config.toml",
@@ -455,6 +508,14 @@ export const EVENT_AGENTS = {
       stop: "AfterAgent",
     },
     timeout_unit: "ms",
+    // Gemini mandates JSON-only stdout ("silence is mandatory"): plain text
+    // becomes a user-facing systemMessage, never context. Inject via
+    // hookSpecificOutput.additionalContext; suppress everything else.
+    context_envelope: {
+      "*": "suppress",
+      session_start: "hookSpecificOutput",
+      user_prompt_submit: "hookSpecificOutput",
+    },
   },
   "qwen-code": {
     config_file: ".qwen/settings.json",
@@ -469,6 +530,12 @@ export const EVENT_AGENTS = {
       stop: "Stop",
     },
     timeout_unit: "ms",
+    // Qwen hooks are a JSON stdin/stdout protocol (Gemini-derived).
+    context_envelope: {
+      "*": "suppress",
+      session_start: "hookSpecificOutput",
+      user_prompt_submit: "hookSpecificOutput",
+    },
   },
   devin: {
     config_file: ".devin/hooks.v1.json",
@@ -482,6 +549,13 @@ export const EVENT_AGENTS = {
       stop: "Stop",
     },
     timeout_unit: "s",
+    // Devin hooks.v1.json: JSON stdout protocol; additionalContext is the
+    // documented injection field for SessionStart/UserPromptSubmit.
+    context_envelope: {
+      "*": "suppress",
+      session_start: "hookSpecificOutput",
+      user_prompt_submit: "hookSpecificOutput",
+    },
   },
   "tabnine-cli": {
     config_file: ".tabnine/agent/settings.json",
@@ -496,6 +570,12 @@ export const EVENT_AGENTS = {
       stop: "AfterAgent",
     },
     timeout_unit: "ms",
+    // Tabnine is Gemini-hooks-compatible (JSON-only stdout).
+    context_envelope: {
+      "*": "suppress",
+      session_start: "hookSpecificOutput",
+      user_prompt_submit: "hookSpecificOutput",
+    },
   },
 };
 

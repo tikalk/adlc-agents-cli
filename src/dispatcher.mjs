@@ -4,15 +4,19 @@
 // This file is COPIED to <project>/.agents/dispatcher.mjs by adlc-agents-cli.
 // It is self-contained (zero runtime deps) and survives CLI uninstall.
 //
-// Usage: node .agents/dispatcher.mjs <event> <skill> <skills_dir> [timeout]
+// Usage: node .agents/dispatcher.mjs <event> <skill> <skills_dir> [timeout] [envelope]
 //   event       — canonical event name (session_start, user_prompt_submit, ...)
 //   skill       — skill name (matches SKILL.md frontmatter `name`)
 //   skills_dir  — project-relative skills directory (e.g. .agents/skills)
 //   timeout     — per-handler timeout in seconds (default 60)
+//   envelope    — stdout wrapper for the agent's context-injection protocol:
+//                 "hookSpecificOutput" | "additionalContext" |
+//                 "additional_context" | "suppress" (default: plain passthrough)
 //
 // Payload is read from stdin (JSON for user_prompt_submit, "{}" otherwise).
 // Output goes to stdout → captured by the agent's native hook → injected as
-// session context.
+// session context (for JSON-protocol agents, wrapped in the envelope the
+// agent's hook schema requires).
 //
 // Two execution paths (both first-class), dispatched by `scripts:` presence:
 //   1. Script path (spec-kit model): run the skill's declared script
@@ -30,7 +34,7 @@ const DEFAULT_TIMEOUT = 60;
 const BODY_INJECTION_EVENTS = new Set(["session_start", "user_prompt_submit"]);
 
 function main() {
-  const [,, event, skillName, skillsDirArg, timeoutArg] = process.argv;
+  const [,, event, skillName, skillsDirArg, timeoutArg, envelopeArg] = process.argv;
 
   if (!event || !skillName) {
     process.stderr.write("dispatcher: missing event or skill name\n");
@@ -38,6 +42,7 @@ function main() {
   }
 
   const timeout = parseTimeout(timeoutArg);
+  const envelope = parseEnvelope(envelopeArg);
   const projectRoot = findProjectRoot();
   const skillsDir = skillsDirArg
     ? resolve(projectRoot, skillsDirArg)
@@ -69,7 +74,7 @@ function main() {
           timeout: timeout * 1000,
           cwd: projectRoot,
         });
-        if (result.stdout) process.stdout.write(result.stdout);
+        if (result.stdout) writeOutput(result.stdout, envelope);
         if (result.status !== 0 && result.stderr) {
           process.stderr.write(result.stderr);
         }
@@ -85,13 +90,44 @@ function main() {
 
   // Path 2: body injection (superpowers model) — applies to orientation events.
   if (BODY_INJECTION_EVENTS.has(event)) {
-    process.stdout.write(body);
+    writeOutput(body, envelope);
     process.exit(0);
   }
 
   // No script and not a body-injection event → fail-open (spec-kit behavior).
   process.stderr.write(`dispatcher: skill "${skillName}" has no script for event "${event}"\n`);
   process.exit(0);
+}
+
+// ── Output wrapping (context-injection envelopes) ───────────────────────
+
+// Write handler output to stdout, wrapped in the JSON envelope the target
+// agent's hook protocol requires (see registry.mjs CONTEXT_ENVELOPES).
+//   - plain (no envelope): passthrough (Claude/Codex inject plain stdout).
+//   - "suppress": emit nothing (strict-JSON agents on non-injectable events).
+//   - JSON envelopes: emit a single-line JSON object, only when text is
+//     non-empty (an empty additionalContext is useless noise).
+function writeOutput(text, envelope) {
+  if (!text) return;
+  if (envelope === "suppress") return;
+  if (envelope === "hookSpecificOutput") {
+    process.stdout.write(JSON.stringify({ hookSpecificOutput: { additionalContext: text } }) + "\n");
+    return;
+  }
+  if (envelope === "additionalContext") {
+    process.stdout.write(JSON.stringify({ additionalContext: text }) + "\n");
+    return;
+  }
+  if (envelope === "additional_context") {
+    process.stdout.write(JSON.stringify({ additional_context: text }) + "\n");
+    return;
+  }
+  process.stdout.write(text);
+}
+
+function parseEnvelope(arg) {
+  const valid = new Set(["hookSpecificOutput", "additionalContext", "additional_context", "suppress"]);
+  return arg && valid.has(arg) ? arg : null;
 }
 
 // ── Skill resolution ────────────────────────────────────────────────────

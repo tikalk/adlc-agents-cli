@@ -20,6 +20,7 @@ import {
   BODY_INJECTION_EVENTS,
   GENERATED_TEXT,
   SOURCE_MARKER,
+  resolveEnvelope,
 } from "./registry.mjs";
 import { parseFrontmatter } from "./frontmatter.mjs";
 
@@ -280,19 +281,25 @@ function buildJsonNestedHooks(resolvedEvents, skillsDir, agentConfig, agentKey) 
 
 function buildDispatcherCommand(event, handler, skillsDir, agentKey) {
   const timeout = handler.timeout || 60;
+  // Context-injection envelope (registry.mjs): appended as a 5th arg so the
+  // dispatcher wraps stdout in the JSON shape this agent's hook protocol
+  // requires. Plain-passthrough agents (Claude/Codex) get no extra arg.
+  const agentConfig = EVENT_AGENTS[agentKey];
+  const envelope = agentConfig ? resolveEnvelope(agentConfig, event) : undefined;
+  const envelopeArg = envelope ? " " + envelope : "";
   // Claude Code: use ${CLAUDE_PROJECT_DIR}/ for portability (shell-expanded).
   if (agentKey === "claude-code") {
     // Use string concatenation to avoid template-literal interpolation of
     // CLAUDE_PROJECT_DIR (it must be literal in the generated command string).
     const projDir = "${CLAUDE_PROJECT_DIR}";
-    return 'node "' + projDir + "/" + DISPATCHER_REL + '" ' + event + " " + handler.skill + " " + skillsDir + " " + timeout;
+    return 'node "' + projDir + "/" + DISPATCHER_REL + '" ' + event + " " + handler.skill + " " + skillsDir + " " + timeout + envelopeArg;
   }
   // Codex: use absolute path relative to project root via $(pwd).
   if (agentKey === "codex") {
-    return `node ${DISPATCHER_REL} ${event} ${handler.skill} ${skillsDir} ${timeout}`;
+    return `node ${DISPATCHER_REL} ${event} ${handler.skill} ${skillsDir} ${timeout}${envelopeArg}`;
   }
   // Cursor / generic: relative path.
-  return `node ${DISPATCHER_REL} ${event} ${handler.skill} ${skillsDir} ${timeout}`;
+  return `node ${DISPATCHER_REL} ${event} ${handler.skill} ${skillsDir} ${timeout}${envelopeArg}`;
 }
 
 // Convert timeout to the agent's native unit (seconds or milliseconds).
@@ -357,7 +364,9 @@ function buildCopilotHooks(resolvedEvents, skillsDir, agentConfig) {
     const entries = [];
     for (const h of handlers) {
       const bashCmd = buildDispatcherCommand(canonicalEvent, h, skillsDir, "github-copilot");
-      const psCmd = `node ${DISPATCHER_REL.replace(/\//g, "\\")} ${canonicalEvent} ${h.skill} ${skillsDir.replace(/\//g, "\\")} ${h.timeout || 60}`;
+      const envelope = resolveEnvelope(agentConfig, canonicalEvent);
+      const envelopeArg = envelope ? " " + envelope : "";
+      const psCmd = `node ${DISPATCHER_REL.replace(/\//g, "\\")} ${canonicalEvent} ${h.skill} ${skillsDir.replace(/\//g, "\\")} ${h.timeout || 60}${envelopeArg}`;
       entries.push({
         type: "command",
         bash: bashCmd,

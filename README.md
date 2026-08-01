@@ -217,7 +217,8 @@ The CLI generates agent-native hook configs that call the dispatcher. Each agent
 
 | Agent | Config file | Format | Timeout unit |
 |-------|------------|--------|-------------|
-| opencode | `.opencode/plugin/adlc-agents-events.ts` | TS plugin | seconds || claude-code | `.claude/settings.json` (merged) | JSON nested | seconds |
+| opencode | `.opencode/plugin/adlc-agents-events.ts` | TS plugin | seconds |
+| claude-code | `.claude/settings.json` (merged) | JSON nested | seconds |
 | cursor | `.cursor/hooks.json` (merged) | JSON nested | seconds |
 | github-copilot | `.github/hooks/adlc-agents.json` | JSON (bash+powershell) | seconds |
 | codex | `.codex/config.toml` (merged) | TOML | seconds |
@@ -225,6 +226,26 @@ The CLI generates agent-native hook configs that call the dispatcher. Each agent
 | qwen-code | `.qwen/settings.json` (merged) | JSON nested | milliseconds |
 | devin | `.devin/hooks.v1.json` (merged) | JSON root-nested | seconds |
 | tabnine-cli | `.tabnine/agent/settings.json` (merged) | JSON nested | milliseconds |
+
+### Context injection: what reaches the model
+
+Not every agent injects a hook's plain-text stdout as model context. The dispatcher wraps its stdout in the JSON envelope each agent's hook protocol requires (passed as a 5th argv arg), per this matrix:
+
+| Agent | `session_start` injection | `user_prompt_submit` injection | Mechanism |
+|-------|--------------------------|-------------------------------|-----------|
+| claude-code | ✅ plain stdout | ✅ plain stdout | none needed |
+| codex | ✅ plain stdout | ✅ plain stdout | none needed |
+| gemini-cli | ✅ JSON envelope | ✅ JSON envelope | `{"hookSpecificOutput":{"additionalContext":...}}` |
+| tabnine-cli | ✅ JSON envelope | ✅ JSON envelope | same |
+| qwen-code | ✅ JSON envelope | ✅ JSON envelope | same |
+| devin | ✅ JSON envelope | ✅ JSON envelope | same |
+| github-copilot | ✅ JSON envelope | ⛔ impossible | `{"additionalContext":...}` (top-level); `userPromptSubmitted` output is not processed |
+| cursor | ✅ JSON envelope | ⛔ impossible | `{"additional_context":...}` (snake_case); `beforeSubmitPrompt` has no context field |
+| opencode | ✅ `system.transform` | ✅ `chat.message` | plugin pushes into hook outputs (no stdout) |
+
+For strict-JSON agents (gemini-cli, tabnine-cli, qwen-code, devin), plain stdout on non-injectable events would become user-facing noise or a hook parse error — there the dispatcher is invoked with `suppress` and emits nothing. On cursor, everything except `sessionStart` is suppressed for the same reason.
+
+> **Codex trust review**: Codex skips non-managed hooks until you review and trust them. After installing, run `/hooks` in Codex once and trust the generated entries (trust is recorded against the hook hash, so upgrades that change the entries need re-trusting). The repo's `.codex/` layer must also be trusted. Hooks are enabled by default otherwise — `[features] hooks = false` in `config.toml` is the kill switch.
 
 > **opencode compatibility**: the generated TS plugin is verified against opencode **≥ 1.18**. opencode's `Part.id` must start with `prt` (its `Identifier` brand) and hooks must never throw — a schema error or rethrown exception in a plugin crashes the whole session. The plugin derives the injected part's id from the last existing part at runtime (so it inherits opencode's brand even if the prefix changes), falling back to `prt_`, and wraps every hook body in try/catch that logs instead of rethrowing. If you upgrade opencode, re-run `adlc-agents-cli upgrade -a opencode` to regenerate the plugin.
 

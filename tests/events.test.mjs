@@ -20,6 +20,8 @@ import {
   BODY_INJECTION_EVENTS,
   EVENT_MARKER,
   DISPATCHER_REL,
+  CONTEXT_ENVELOPES,
+  resolveEnvelope,
 } from "../src/registry.mjs";
 
 const SAMPLE_MANIFEST = {
@@ -289,6 +291,25 @@ describe("Events: Copilot JSON generation", () => {
       assert.ok(content.sessionStart[0].bash.includes("/"), "bash uses POSIX paths");
       assert.ok(content.sessionStart[0].powershell.includes("\\"), "powershell uses Windows paths");
       assert.equal(content.sessionStart[0][EVENT_MARKER], true);
+      // Context-injection envelope: sessionStart carries top-level
+      // additionalContext on BOTH platform variants; userPromptSubmitted
+      // (output not processed by Copilot) carries none.
+      assert.ok(
+        content.sessionStart[0].bash.endsWith(" additionalContext"),
+        "sessionStart bash carries additionalContext envelope",
+      );
+      assert.ok(
+        content.sessionStart[0].powershell.endsWith(" additionalContext"),
+        "sessionStart powershell carries additionalContext envelope",
+      );
+      assert.ok(
+        !content.userPromptSubmitted[0].bash.includes("additionalContext"),
+        "userPromptSubmitted carries no envelope",
+      );
+      assert.ok(
+        !content.userPromptSubmitted[0].powershell.includes("additionalContext"),
+        "userPromptSubmitted powershell carries no envelope",
+      );
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
@@ -427,6 +448,131 @@ echo "SCRIPT_OUTPUT: constitution loaded"`,
       rmSync(projectRoot, { recursive: true, force: true });
     }
   });
+
+  it("envelope: hookSpecificOutput wraps body output as single-line JSON", () => {
+    const projectRoot = createTestProject(true);
+    try {
+      installDispatcher(projectRoot);
+      const dispatcher = join(projectRoot, DISPATCHER_REL);
+      const skillsDir = join(projectRoot, ".agents", "skills");
+
+      const result = spawnSync(
+        "node",
+        [dispatcher, "session_start", "team-boot", skillsDir, "10", "hookSpecificOutput"],
+        { encoding: "utf-8", cwd: projectRoot },
+      );
+
+      assert.equal(result.status, 0, `dispatcher exited ${result.status}: ${result.stderr}`);
+      const parsed = JSON.parse(result.stdout.trim());
+      assert.ok(parsed.hookSpecificOutput, "hookSpecificOutput wrapper present");
+      assert.ok(
+        parsed.hookSpecificOutput.additionalContext.includes("Read .adlc/init-options.json"),
+        "Body content inside additionalContext",
+      );
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("envelope: additionalContext and additional_context use top-level fields", () => {
+    const projectRoot = createTestProject(true);
+    try {
+      installDispatcher(projectRoot);
+      const dispatcher = join(projectRoot, DISPATCHER_REL);
+      const skillsDir = join(projectRoot, ".agents", "skills");
+
+      const camel = spawnSync(
+        "node",
+        [dispatcher, "session_start", "team-boot", skillsDir, "10", "additionalContext"],
+        { encoding: "utf-8", cwd: projectRoot },
+      );
+      const camelParsed = JSON.parse(camel.stdout.trim());
+      assert.ok(camelParsed.additionalContext.includes("Read .adlc/init-options.json"));
+
+      const snake = spawnSync(
+        "node",
+        [dispatcher, "session_start", "team-boot", skillsDir, "10", "additional_context"],
+        { encoding: "utf-8", cwd: projectRoot },
+      );
+      const snakeParsed = JSON.parse(snake.stdout.trim());
+      assert.ok(snakeParsed.additional_context.includes("Read .adlc/init-options.json"));
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("envelope: suppress emits nothing; invalid envelope falls back to plain", () => {
+    const projectRoot = createTestProject(true);
+    try {
+      installDispatcher(projectRoot);
+      const dispatcher = join(projectRoot, DISPATCHER_REL);
+      const skillsDir = join(projectRoot, ".agents", "skills");
+
+      const suppressed = spawnSync(
+        "node",
+        [dispatcher, "session_start", "team-boot", skillsDir, "10", "suppress"],
+        { encoding: "utf-8", cwd: projectRoot },
+      );
+      assert.equal(suppressed.status, 0);
+      assert.equal(suppressed.stdout, "", "suppress emits no stdout");
+
+      const bogus = spawnSync(
+        "node",
+        [dispatcher, "session_start", "team-boot", skillsDir, "10", "not-an-envelope"],
+        { encoding: "utf-8", cwd: projectRoot },
+      );
+      assert.ok(bogus.stdout.includes("Read .adlc/init-options.json"), "invalid envelope → plain passthrough");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("envelope: script path output is wrapped too", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "adlc-env-script-"));
+    try {
+      const skillsDir = join(projectRoot, ".agents", "skills");
+      mkdirSync(join(skillsDir, "boot-skill"), { recursive: true });
+      writeFileSync(
+        join(skillsDir, "boot-skill", "SKILL.md"),
+        `---
+name: boot-skill
+description: Script-backed skill
+scripts:
+  sh: scripts/boot.sh
+---
+
+# boot-skill
+
+Body should NOT be output when script runs.`,
+        "utf-8",
+      );
+      mkdirSync(join(skillsDir, "boot-skill", "scripts"), { recursive: true });
+      writeFileSync(
+        join(skillsDir, "boot-skill", "scripts", "boot.sh"),
+        `#!/bin/bash\necho "SCRIPT_OUT"`,
+        "utf-8",
+      );
+      try { chmodSync(join(skillsDir, "boot-skill", "scripts", "boot.sh"), 0o755); } catch {}
+
+      installDispatcher(projectRoot);
+      const dispatcher = join(projectRoot, DISPATCHER_REL);
+
+      const result = spawnSync(
+        "node",
+        [dispatcher, "session_start", "boot-skill", skillsDir, "10", "hookSpecificOutput"],
+        { encoding: "utf-8", cwd: projectRoot },
+      );
+
+      assert.equal(result.status, 0, `dispatcher exited ${result.status}: ${result.stderr}`);
+      const parsed = JSON.parse(result.stdout.trim());
+      assert.ok(
+        parsed.hookSpecificOutput.additionalContext.includes("SCRIPT_OUT"),
+        "Script stdout wrapped in envelope",
+      );
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("Registry: events data", () => {
@@ -474,6 +620,62 @@ describe("Registry: events data", () => {
   });
 });
 
+describe("Events: context-injection envelopes", () => {
+  it("envelope builders produce single-line JSON with the right field shape", () => {
+    assert.equal(
+      CONTEXT_ENVELOPES.hookSpecificOutput("ctx"),
+      JSON.stringify({ hookSpecificOutput: { additionalContext: "ctx" } }),
+    );
+    assert.equal(
+      CONTEXT_ENVELOPES.additionalContext("ctx"),
+      JSON.stringify({ additionalContext: "ctx" }),
+    );
+    assert.equal(
+      CONTEXT_ENVELOPES.additional_context("ctx"),
+      JSON.stringify({ additional_context: "ctx" }),
+    );
+  });
+
+  it("resolveEnvelope: event key wins, * is fallback, absent → undefined", () => {
+    const cfg = { context_envelope: { "*": "suppress", session_start: "hookSpecificOutput" } };
+    assert.equal(resolveEnvelope(cfg, "session_start"), "hookSpecificOutput");
+    assert.equal(resolveEnvelope(cfg, "pre_tool_use"), "suppress");
+    assert.equal(resolveEnvelope({}, "session_start"), undefined);
+    assert.equal(resolveEnvelope({ context_envelope: {} }, "session_start"), undefined);
+    assert.equal(resolveEnvelope(null, "session_start"), undefined);
+  });
+
+  it("plain-stdout agents (claude-code, codex) have no envelope", () => {
+    assert.equal(resolveEnvelope(getEventAgentConfig("claude-code"), "session_start"), undefined);
+    assert.equal(resolveEnvelope(getEventAgentConfig("codex"), "session_start"), undefined);
+    assert.equal(resolveEnvelope(getEventAgentConfig("codex"), "user_prompt_submit"), undefined);
+  });
+
+  it("gemini/tabnine/qwen/devin envelope both injectable events, suppress the rest", () => {
+    for (const key of ["gemini-cli", "tabnine-cli", "qwen-code", "devin"]) {
+      const cfg = getEventAgentConfig(key);
+      assert.equal(resolveEnvelope(cfg, "session_start"), "hookSpecificOutput", `${key} session_start`);
+      assert.equal(resolveEnvelope(cfg, "user_prompt_submit"), "hookSpecificOutput", `${key} user_prompt_submit`);
+      assert.equal(resolveEnvelope(cfg, "pre_tool_use"), "suppress", `${key} pre_tool_use suppressed`);
+      assert.equal(resolveEnvelope(cfg, "session_end"), "suppress", `${key} session_end suppressed`);
+      assert.equal(resolveEnvelope(cfg, "stop"), "suppress", `${key} stop suppressed`);
+    }
+  });
+
+  it("copilot envelopes session_start only; cursor envelopes session_start with snake_case", () => {
+    const copilot = getEventAgentConfig("github-copilot");
+    assert.equal(resolveEnvelope(copilot, "session_start"), "additionalContext");
+    // userPromptSubmitted output is not processed → no envelope.
+    assert.equal(resolveEnvelope(copilot, "user_prompt_submit"), undefined);
+
+    const cursor = getEventAgentConfig("cursor");
+    assert.equal(resolveEnvelope(cursor, "session_start"), "additional_context");
+    // beforeSubmitPrompt has no context field → suppressed (JSON parse noise).
+    assert.equal(resolveEnvelope(cursor, "user_prompt_submit"), "suppress");
+    assert.equal(resolveEnvelope(cursor, "pre_tool_use"), "suppress");
+  });
+});
+
 describe("Events: Codex TOML generation", () => {
   it("generates TOML config with hooks blocks", () => {
     const projectRoot = createTestProject(false);
@@ -505,6 +707,9 @@ describe("Events: Codex TOML generation", () => {
       const content = readFileSync(join(projectRoot, ".codex/config.toml"), "utf-8");
       const sessionStartCount = (content.match(/\[\[hooks\.SessionStart\]\]/g) || []).length;
       assert.equal(sessionStartCount, 1, "No duplicate SessionStart TOML blocks");
+      // Codex injects plain stdout → no envelope arg appended.
+      assert.ok(!content.includes("hookSpecificOutput"), "Codex has no JSON envelope");
+      assert.ok(!content.includes("suppress"), "Codex is not suppressed");
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
@@ -550,6 +755,16 @@ describe("Events: Gemini ms timeout conversion", () => {
       assert.equal(content.hooks.SessionStart[0].timeout, 60000, "60s → 60000ms");
       assert.equal(content.hooks.BeforeAgent[0].timeout, 30000, "30s → 30000ms");
       assert.ok(content.hooks.SessionStart[0][EVENT_MARKER], "Marker present");
+      // Context-injection envelope: Gemini is a JSON-only protocol, so the
+      // dispatcher command carries the hookSpecificOutput envelope arg.
+      assert.ok(
+        content.hooks.SessionStart[0].command.endsWith(" hookSpecificOutput"),
+        "SessionStart command carries hookSpecificOutput envelope",
+      );
+      assert.ok(
+        content.hooks.BeforeAgent[0].command.endsWith(" hookSpecificOutput"),
+        "BeforeAgent command carries hookSpecificOutput envelope",
+      );
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
