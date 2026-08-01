@@ -131,7 +131,7 @@ describe("Events: opencode plugin generation", () => {
       const agentConfig = getEventAgentConfig("opencode");
       const resolved = resolveEvents(SAMPLE_MANIFEST, agentConfig);
       const result = installEvents("opencode", projectRoot, resolved, ".agents/skills");
-      assert.equal(result.path, ".opencode/plugin/adlc-agents-events.ts");
+      assert.equal(result.path, ".opencode/plugin/adlc-skills-events.ts");
       const content = readFileSync(join(projectRoot, result.path), "utf-8");
       assert.ok(content.includes("AdlcEventsPlugin"));
       assert.ok(content.includes("runEvent"));
@@ -150,7 +150,7 @@ describe("Events: opencode plugin generation", () => {
       const agentConfig = getEventAgentConfig("opencode");
       const resolved = resolveEvents(SAMPLE_MANIFEST, agentConfig);
       installEvents("opencode", projectRoot, resolved, ".agents/skills");
-      const content = readFileSync(join(projectRoot, ".opencode/plugin/adlc-agents-events.ts"), "utf-8");
+      const content = readFileSync(join(projectRoot, ".opencode/plugin/adlc-skills-events.ts"), "utf-8");
 
       const chatMessage = content.match(/"chat\.message": async \(input, output\) => \{([\s\S]*?)\n    \}/);
       assert.ok(chatMessage, "chat.message handler present");
@@ -170,7 +170,7 @@ describe("Events: opencode plugin generation", () => {
       const agentConfig = getEventAgentConfig("opencode");
       const resolved = resolveEvents(SAMPLE_MANIFEST, agentConfig);
       installEvents("opencode", projectRoot, resolved, ".agents/skills");
-      const content = readFileSync(join(projectRoot, ".opencode/plugin/adlc-agents-events.ts"), "utf-8");
+      const content = readFileSync(join(projectRoot, ".opencode/plugin/adlc-skills-events.ts"), "utf-8");
 
       const chatMessage = content.match(/"chat\.message": async \(input, output\) => \{([\s\S]*?)\n    \}/);
       assert.ok(chatMessage, "chat.message handler present");
@@ -189,7 +189,7 @@ describe("Events: opencode plugin generation", () => {
       const agentConfig = getEventAgentConfig("opencode");
       const resolved = resolveEvents(SAMPLE_MANIFEST, agentConfig);
       installEvents("opencode", projectRoot, resolved, ".agents/skills");
-      const content = readFileSync(join(projectRoot, ".opencode/plugin/adlc-agents-events.ts"), "utf-8");
+      const content = readFileSync(join(projectRoot, ".opencode/plugin/adlc-skills-events.ts"), "utf-8");
 
       const systemTransform = content.match(/"experimental\.chat\.system\.transform": async \(_input, output\) => \{([\s\S]*?)\n    \}/);
       assert.ok(systemTransform, "system.transform handler present");
@@ -280,7 +280,7 @@ describe("Events: Copilot JSON generation", () => {
       const agentConfig = getEventAgentConfig("github-copilot");
       const resolved = resolveEvents(SAMPLE_MANIFEST, agentConfig);
       const result = installEvents("github-copilot", projectRoot, resolved, ".agents/skills");
-      assert.equal(result.path, ".github/hooks/adlc-agents.json");
+      assert.equal(result.path, ".github/hooks/adlc-skills.json");
 
       const content = JSON.parse(readFileSync(join(projectRoot, result.path), "utf-8"));
       assert.ok(content.sessionStart);
@@ -350,7 +350,7 @@ describe("Events: surgical teardown", () => {
       const resolved = resolveEvents(SAMPLE_MANIFEST, agentConfig);
       installEvents("opencode", projectRoot, resolved, ".agents/skills");
 
-      const pluginPath = join(projectRoot, ".opencode/plugin/adlc-agents-events.ts");
+      const pluginPath = join(projectRoot, ".opencode/plugin/adlc-skills-events.ts");
       assert.ok(existsSync(pluginPath));
 
       const result = removeEvents("opencode", projectRoot);
@@ -689,7 +689,7 @@ describe("Events: Codex TOML generation", () => {
       assert.ok(content.includes("[[hooks.SessionStart]]"));
       assert.ok(content.includes("[[hooks.UserPromptSubmit]]"));
       assert.ok(content.includes("type = \"command\""));
-      assert.ok(content.includes("adlc_marker = true"));
+      assert.ok(content.includes("adlc_skills_marker = true"));
       assert.ok(content.includes("timeout = 60"), "Codex uses seconds");
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
@@ -735,7 +735,7 @@ describe("Events: Codex TOML generation", () => {
       const after = readFileSync(join(projectRoot, ".codex/config.toml"), "utf-8");
       assert.ok(after.includes("echo user"), "User hook preserved");
       assert.ok(after.includes("some_setting = true"), "User config preserved");
-      assert.ok(!after.includes("adlc_marker"), "Our marker blocks removed");
+      assert.ok(!after.includes("adlc_skills_marker"), "Our marker blocks removed");
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }

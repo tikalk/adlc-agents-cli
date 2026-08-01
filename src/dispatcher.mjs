@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ADLC agents-cli event dispatcher.
 //
-// This file is COPIED to <project>/.agents/dispatcher.mjs by adlc-agents-cli.
+// This file is COPIED to <project>/.agents/dispatcher.mjs by adlc-skills-cli.
 // It is self-contained (zero runtime deps) and survives CLI uninstall.
 //
 // Usage: node .agents/dispatcher.mjs <event> <skill> <skills_dir> [timeout] [envelope]

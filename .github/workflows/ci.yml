@@ -27,4 +27,4 @@ jobs:
         run: npm test
 
       - name: Verify CLI starts
-        run: node bin/adlc-agents-cli.mjs agents
+        run: node bin/adlc-skills-cli.mjs agents

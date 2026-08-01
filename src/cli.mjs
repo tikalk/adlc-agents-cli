@@ -60,7 +60,7 @@ async function cmdAdd(args, flags) {
   for (const agentKey of agents) {
     const agent = getAgent(agentKey);
     if (!agent) {
-      console.error(`Error: unknown agent "${agentKey}". Run 'adlc-agents-cli agents' to list supported agents.`);
+      console.error(`Error: unknown agent "${agentKey}". Run 'adlc-skills-cli agents' to list supported agents.`);
       return 1;
     }
 
@@ -355,14 +355,14 @@ function parseArgs(argv) {
 
 function printHelp() {
   console.log(`
-adlc-agents-cli — wrap npx skills add + generate slash commands + session_start events
+adlc-skills-cli — wrap npx skills add + generate slash commands + session_start events
 
 USAGE:
-  adlc-agents-cli add <source> -a <agent> [-a ...] [flags]
-  adlc-agents-cli upgrade [-a <agent>]
-  adlc-agents-cli remove [-a <agent>]
-  adlc-agents-cli status [-a <agent>]
-  adlc-agents-cli agents
+  adlc-skills-cli add <source> -a <agent> [-a ...] [flags]
+  adlc-skills-cli upgrade [-a <agent>]
+  adlc-skills-cli remove [-a <agent>]
+  adlc-skills-cli status [-a <agent>]
+  adlc-skills-cli agents
 
 COMMANDS:
   add <source>       Install skills via npx skills + generate commands + events
@@ -382,14 +382,14 @@ FLAGS:
   -y, --yes          Skip confirmation prompts
 
 INSTALL:
-  npx adlc-agents-cli add ...     one-off (no install needed)
-  npm install -g adlc-agents-cli  install as global binary → adlc-agents-cli add ...
+  npx adlc-skills-cli add ...     one-off (no install needed)
+  npm install -g adlc-skills-cli  install as global binary → adlc-skills-cli add ...
 
 EXAMPLES:
-  adlc-agents-cli add tikalk/adlc-team-skills -a opencode
-  adlc-agents-cli add mattpocock/skills -a claude-code -a opencode --no-events
-  adlc-agents-cli add tikalk/adlc-team-skills -a opencode --prefix adlc --skill team-setup
-  adlc-agents-cli status
-  adlc-agents-cli agents
+  adlc-skills-cli add tikalk/adlc-team-skills -a opencode
+  adlc-skills-cli add mattpocock/skills -a claude-code -a opencode --no-events
+  adlc-skills-cli add tikalk/adlc-team-skills -a opencode --prefix adlc --skill team-setup
+  adlc-skills-cli status
+  adlc-skills-cli agents
 `);
 }

@@ -1,6 +1,6 @@
 # `.events.json` Schema
 
-A `.events.json` file at the root of a skills repo declares which skills should auto-trigger on agent lifecycle events. When `adlc-agents-cli add` installs skills from a repo, it reads this manifest and generates per-agent native hook configurations.
+A `.events.json` file at the root of a skills repo declares which skills should auto-trigger on agent lifecycle events. When `adlc-skills-cli add` installs skills from a repo, it reads this manifest and generates per-agent native hook configurations.
 
 Repos without `.events.json` are handled gracefully — commands are generated, events are skipped silently.
 
@@ -113,4 +113,4 @@ The stdout is captured by the agent's native hook and injected as session contex
 1. Create `.events.json` at the repo root
 2. Declare events mapping to skill names (skills must exist in the repo's `skills/` directory)
 3. Optionally add `scripts:` blocks to skills that need deterministic execution
-4. When users run `adlc-agents-cli add <your-repo> -a <agent>`, events are auto-wired
+4. When users run `adlc-skills-cli add <your-repo> -a <agent>`, events are auto-wired

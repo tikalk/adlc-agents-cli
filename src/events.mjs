@@ -257,7 +257,7 @@ function generateJsonNested(agentKey, projectRoot, resolvedEvents, skillsDir, ag
 }
 
 function buildJsonNestedHooks(resolvedEvents, skillsDir, agentConfig, agentKey) {
-  // Returns { <NativeEvent>: [ { type, command, timeout?, _adlc_agents_cli: true } ] }
+  // Returns { <NativeEvent>: [ { type, command, timeout?, _adlc_skills_cli: true } ] }
   const result = {};
   for (const [canonicalEvent, handlers] of Object.entries(resolvedEvents)) {
     const nativeEvent = agentConfig.canonical_to_native[canonicalEvent];
@@ -433,7 +433,7 @@ function buildTomlFragment(resolvedEvents, skillsDir, agentConfig, agentKey) {
       lines.push(`type = "command"`);
       lines.push(`command = ${tomlQuote(cmd)}`);
       lines.push(`timeout = ${timeout}`);
-      lines.push(`adlc_marker = true`);
+      lines.push(`adlc_skills_marker = true`);
     }
   }
   return lines.join("\n") + "\n";
@@ -445,7 +445,7 @@ function tomlQuote(value) {
 
 function stripTomlMarkerBlocks(content) {
   // Remove [[hooks.*]] top-level blocks (and their [[hooks.*.hooks]] sub-blocks)
-  // that contain adlc_marker = true.
+  // that contain adlc_skills_marker = true.
   const lines = content.split("\n");
   const result = [];
   let i = 0;
@@ -467,10 +467,10 @@ function stripTomlMarkerBlocks(content) {
         j++;
       }
 
-      // Check if this block has our marker (adlc_marker = true on a hook entry).
+      // Check if this block has our marker (adlc_skills_marker = true on a hook entry).
       // Do NOT check for the comment MARKER — it's a file-level header that
       // can appear between blocks and would cause false positives.
-      const hasMarker = blockLines.some((l) => l.includes("adlc_marker = true"));
+      const hasMarker = blockLines.some((l) => l.includes("adlc_skills_marker = true"));
 
       if (hasMarker) {
         i = j; // skip the entire block
@@ -493,7 +493,7 @@ function generateJsonRootNested(projectRoot, resolvedEvents, skillsDir, agentCon
   validateSafeDestination(configPath, projectRoot);
   mkdirSync(dirname(configPath), { recursive: true });
 
-  // Build root-level entries: { <NativeEvent>: [ {type, command, timeout, _adlc_agents_cli: true} ] }
+  // Build root-level entries: { <NativeEvent>: [ {type, command, timeout, _adlc_skills_cli: true} ] }
   const newEntries = buildJsonNestedHooks(resolvedEvents, skillsDir, agentConfig, agentKey);
 
   let existing = {};
@@ -654,7 +654,7 @@ function removeTomlEvents(agentKey, projectRoot) {
   if (!existsSync(configPath)) return null;
 
   const content = readFileSync(configPath, "utf-8");
-  if (!content.includes("adlc_marker") && !content.includes(MARKER)) {
+  if (!content.includes("adlc_skills_marker") && !content.includes(MARKER)) {
     return { path: agentConfig.config_file, action: "no-hooks" };
   }
 
