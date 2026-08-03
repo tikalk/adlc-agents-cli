@@ -35,6 +35,14 @@ const SAMPLE_MANIFEST = {
   },
 };
 
+const SESSION_START_ONLY_MANIFEST = {
+  events: {
+    session_start: [
+      { skill: "team-boot", description: "Bootstrap session", timeout: 60 },
+    ],
+  },
+};
+
 function createTestProject(withSkills = true) {
   const dir = mkdtempSync(join(tmpdir(), "adlc-test-"));
   if (withSkills) {
@@ -202,6 +210,46 @@ describe("Events: opencode plugin generation", () => {
       assert.ok(chatMessage[1].includes("try {"), "chat.message wrapped in try");
       assert.ok(chatMessage[1].includes("console.error"), "chat.message catches and logs");
       assert.ok(!chatMessage[1].includes("throw"), "chat.message never rethrows");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("session_start handler uses _sessionStartCache to avoid re-spawning on every step", () => {
+    const projectRoot = createTestProject(false);
+    try {
+      const agentConfig = getEventAgentConfig("opencode");
+      const resolved = resolveEvents(SAMPLE_MANIFEST, agentConfig);
+      installEvents("opencode", projectRoot, resolved, ".agents/skills");
+      const content = readFileSync(join(projectRoot, ".opencode/plugin/adlc-skills-events.ts"), "utf-8");
+
+      // Cache variable declared at module level
+      assert.ok(content.includes("_sessionStartCache"), "cache variable present");
+      assert.ok(content.includes("Record<string, string>"), "cache typed as Record");
+
+      // system.transform handler checks cache before running dispatcher
+      const systemTransform = content.match(/"experimental\.chat\.system\.transform": async \(_input, output\) => \{([\s\S]*?)\n    \}/);
+      assert.ok(systemTransform, "system.transform handler present");
+      assert.ok(systemTransform[1].includes("_sessionStartCache"), "handler references cache");
+      assert.ok(systemTransform[1].includes("!(_key in _sessionStartCache)"), "handler checks cache before spawn");
+      assert.ok(systemTransform[1].includes("runEvent"), "handler still calls runEvent on cache miss");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("session_start-only manifest generates no chat.message hook", () => {
+    const projectRoot = createTestProject(false);
+    try {
+      const agentConfig = getEventAgentConfig("opencode");
+      const resolved = resolveEvents(SESSION_START_ONLY_MANIFEST, agentConfig);
+      installEvents("opencode", projectRoot, resolved, ".agents/skills");
+      const content = readFileSync(join(projectRoot, ".opencode/plugin/adlc-skills-events.ts"), "utf-8");
+
+      assert.ok(content.includes("experimental.chat.system.transform"), "system.transform hook present");
+      assert.ok(!content.includes("chat.message"), "no chat.message hook for session_start-only manifest");
+      assert.ok(!content.includes("team-discover"), "no team-discover reference");
+      assert.ok(content.includes("team-boot"), "team-boot present");
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }

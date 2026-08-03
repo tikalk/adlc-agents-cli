@@ -150,6 +150,11 @@ import { resolve } from "node:path"
 let DISPATCHER = ""
 let SKILLS_DIR = "${skillsDir}"
 
+// Cache for session_start handlers — experimental.chat.system.transform
+// fires on every step, but the script output is stable for the session.
+// Keyed by skill name so multiple session_start handlers each get their own cache.
+const _sessionStartCache: Record<string, string> = {}
+
 function runEvent(command: string, event: string, timeoutSec: number): string {
   try {
     const result = execFileSync("node", [DISPATCHER, event, command, SKILLS_DIR, String(timeoutSec)], {
@@ -193,7 +198,11 @@ function buildOpenCodeHooks(resolvedEvents, skillsDir, agentConfig) {
       if (nativeEvent === "experimental.chat.system.transform") {
         entries.push(`    "${nativeEvent}": async (_input, output) => {
       try {
-        const ctx = runEvent("${h.skill}", "${canonicalEvent}", ${h.timeout})
+        const _key = "${h.skill}"
+        if (!(_key in _sessionStartCache)) {
+          _sessionStartCache[_key] = runEvent(_key, "${canonicalEvent}", ${h.timeout})
+        }
+        const ctx = _sessionStartCache[_key]
         if (ctx) output.system.push(ctx)
       } catch (e) {
         console.error("adlc system.transform hook failed:", (e as Error).message)
