@@ -1,7 +1,7 @@
 // CLI entry point — parses args, orchestrates npx skills + command generation + events.
 
 import { spawnSync } from "node:child_process";
-import { writeFileSync, readFileSync, mkdirSync, existsSync, rmSync, readdirSync, statSync } from "node:fs";
+import { writeFileSync, readFileSync, mkdirSync, existsSync, rmSync, readdirSync, statSync, copyFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { AGENTS, resolveNpxAgent, getAgent, GENERATED_HEADER, EVENT_AGENTS, getEventAgentConfig } from "./registry.mjs";
 import { findInstalledSkills, detectAdlc, expandTilde } from "./source.mjs";
@@ -11,6 +11,7 @@ import {
   installEvents,
   removeEvents,
   fetchEventsManifest,
+  readLocalEventsManifest,
   resolveEvents,
 } from "./events.mjs";
 
@@ -121,6 +122,12 @@ async function cmdAdd(args, flags) {
     if (agentEventConfig && !noEvents) {
       const manifest = await fetchEventsManifest(source);
       if (manifest && manifest.events) {
+        // Copy .events.json to target project so upgrade can re-read it
+        const targetEventsPath = join(projectRoot, ".events.json");
+        const sourceEventsPath = resolve(source, ".events.json");
+        if (source !== "." && existsSync(sourceEventsPath)) {
+          copyFileSync(sourceEventsPath, targetEventsPath);
+        }
         const resolvedEvents = resolveEvents(manifest, agentEventConfig);
         const eventCount = Object.keys(resolvedEvents).length;
         if (eventCount > 0) {
@@ -197,6 +204,22 @@ async function cmdUpgrade(args, flags) {
     }
 
     console.log(`${agent.name}: ${updated} updated, ${skipped} user-modified (skipped)`);
+
+    // Re-generate events from .events.json in target project (if present)
+    const agentEventConfig = getEventAgentConfig(agentKey);
+    if (agentEventConfig) {
+      const localManifest = readLocalEventsManifest(projectRoot);
+      if (localManifest && localManifest.events) {
+        const resolvedEvents = resolveEvents(localManifest, agentEventConfig);
+        const eventCount = Object.keys(resolvedEvents).length;
+        if (eventCount > 0) {
+          installDispatcher(projectRoot);
+          const skillsDir = isGlobal ? agent.global_skills_dir : agent.skills_dir;
+          installEvents(agentKey, projectRoot, resolvedEvents, skillsDir);
+          console.log(`${agent.name}: events re-generated (${eventCount})`);
+        }
+      }
+    }
   }
 
   return 0;
@@ -243,6 +266,13 @@ async function cmdRemove(args, flags) {
   if (existsSync(dispatcherPath)) {
     rmSync(dispatcherPath);
     console.log("Removed dispatcher: .agents/dispatcher.mjs");
+  }
+
+  // Clean up .events.json (copied from source during add)
+  const eventsPath = join(projectRoot, ".events.json");
+  if (existsSync(eventsPath)) {
+    rmSync(eventsPath);
+    console.log("Removed .events.json");
   }
 
   return 0;

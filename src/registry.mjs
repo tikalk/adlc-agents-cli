@@ -413,13 +413,13 @@ export const EVENT_AGENTS = {
     format: "ts-plugin",
     // opencode doesn't have lifecycle event hooks (session.start, etc.).
     // Instead it has fixed hook keys. Map canonical events to opencode hooks:
-    //   session_start       → experimental.chat.system.transform (system prompt injection)
+    //   session_start       → experimental.chat.messages.transform (first user message injection — active instructions)
     //   user_prompt_submit  → chat.message (fires on each user message)
     //   pre_tool_use        → tool.execute.before
     //   post_tool_use       → tool.execute.after
     //   session_end / stop  → (no equivalent; skip)
     canonical_to_native: {
-      session_start: "experimental.chat.system.transform",
+      session_start: "experimental.chat.messages.transform",
       pre_tool_use: "tool.execute.before",
       post_tool_use: "tool.execute.after",
       session_end: null,

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, chmodSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, chmodSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
@@ -145,7 +145,7 @@ describe("Events: opencode plugin generation", () => {
       assert.ok(content.includes("runEvent"));
       assert.ok(content.includes("team-boot"));
       assert.ok(content.includes("team-discover"));
-      assert.ok(content.includes("experimental.chat.system.transform"), "session_start → system.transform hook");
+      assert.ok(content.includes("experimental.chat.messages.transform"), "session_start → messages.transform hook");
       assert.ok(content.includes("chat.message"), "user_prompt_submit → chat.message hook");
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
@@ -199,11 +199,11 @@ describe("Events: opencode plugin generation", () => {
       installEvents("opencode", projectRoot, resolved, ".agents/skills");
       const content = readFileSync(join(projectRoot, ".opencode/plugin/adlc-skills-events.ts"), "utf-8");
 
-      const systemTransform = content.match(/"experimental\.chat\.system\.transform": async \(_input, output\) => \{([\s\S]*?)\n    \}/);
-      assert.ok(systemTransform, "system.transform handler present");
-      assert.ok(systemTransform[1].includes("try {"), "system.transform wrapped in try");
-      assert.ok(systemTransform[1].includes("console.error"), "system.transform catches and logs");
-      assert.ok(!systemTransform[1].includes("throw"), "system.transform never rethrows");
+      const messagesTransform = content.match(/"experimental\.chat\.messages\.transform": async \(_input, output\) => \{([\s\S]*?)\n    \}/);
+      assert.ok(messagesTransform, "messages.transform handler present");
+      assert.ok(messagesTransform[1].includes("try {"), "messages.transform wrapped in try");
+      assert.ok(messagesTransform[1].includes("console.error"), "messages.transform catches and logs");
+      assert.ok(!messagesTransform[1].includes("throw"), "messages.transform never rethrows");
 
       const chatMessage = content.match(/"chat\.message": async \(input, output\) => \{([\s\S]*?)\n    \}/);
       assert.ok(chatMessage, "chat.message handler present");
@@ -227,12 +227,12 @@ describe("Events: opencode plugin generation", () => {
       assert.ok(content.includes("_sessionStartCache"), "cache variable present");
       assert.ok(content.includes("Record<string, string>"), "cache typed as Record");
 
-      // system.transform handler checks cache before running dispatcher
-      const systemTransform = content.match(/"experimental\.chat\.system\.transform": async \(_input, output\) => \{([\s\S]*?)\n    \}/);
-      assert.ok(systemTransform, "system.transform handler present");
-      assert.ok(systemTransform[1].includes("_sessionStartCache"), "handler references cache");
-      assert.ok(systemTransform[1].includes("!(_key in _sessionStartCache)"), "handler checks cache before spawn");
-      assert.ok(systemTransform[1].includes("runEvent"), "handler still calls runEvent on cache miss");
+      // messages.transform handler checks cache before running dispatcher
+      const messagesTransform = content.match(/"experimental\.chat\.messages\.transform": async \(_input, output\) => \{([\s\S]*?)\n    \}/);
+      assert.ok(messagesTransform, "messages.transform handler present");
+      assert.ok(messagesTransform[1].includes("_sessionStartCache"), "handler references cache");
+      assert.ok(messagesTransform[1].includes("!(_key in _sessionStartCache)"), "handler checks cache before spawn");
+      assert.ok(messagesTransform[1].includes("runEvent"), "handler still calls runEvent on cache miss");
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
@@ -252,13 +252,33 @@ describe("Events: opencode plugin generation", () => {
       // State tracking variable
       assert.ok(content.includes("_sessionStartState"), "state tracking variable present");
 
-      // system.transform handler invalidates on state change
-      const systemTransform = content.match(/"experimental\.chat\.system\.transform": async \(_input, output\) => \{([\s\S]*?)\n    \}/);
-      assert.ok(systemTransform, "system.transform handler present");
-      assert.ok(systemTransform[1].includes("statSync"), "handler uses statSync to check mtime");
-      assert.ok(systemTransform[1].includes(".adlc/init-options.json"), "handler checks init-options.json");
-      assert.ok(systemTransform[1].includes("_sessionStartState"), "handler references state variable");
-      assert.ok(systemTransform[1].includes("delete _sessionStartCache"), "handler clears cache on state change");
+      // messages.transform handler invalidates on state change
+      const messagesTransform = content.match(/"experimental\.chat\.messages\.transform": async \(_input, output\) => \{([\s\S]*?)\n    \}/);
+      assert.ok(messagesTransform, "messages.transform handler present");
+      assert.ok(messagesTransform[1].includes("statSync"), "handler uses statSync to check mtime");
+      assert.ok(messagesTransform[1].includes(".adlc/init-options.json"), "handler checks init-options.json");
+      assert.ok(messagesTransform[1].includes("_sessionStartState"), "handler references state variable");
+      assert.ok(messagesTransform[1].includes("delete _sessionStartCache"), "handler clears cache on state change");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("messages.transform handler injects into first user message with guard", () => {
+    const projectRoot = createTestProject(false);
+    try {
+      const agentConfig = getEventAgentConfig("opencode");
+      const resolved = resolveEvents(SAMPLE_MANIFEST, agentConfig);
+      installEvents("opencode", projectRoot, resolved, ".agents/skills");
+      const content = readFileSync(join(projectRoot, ".opencode/plugin/adlc-skills-events.ts"), "utf-8");
+
+      const messagesTransform = content.match(/"experimental\.chat\.messages\.transform": async \(_input, output\) => \{([\s\S]*?)\n    \}/);
+      assert.ok(messagesTransform, "messages.transform handler present");
+      // Injects into first user message (not system prompt)
+      assert.ok(messagesTransform[1].includes("firstUser"), "finds first user message");
+      assert.ok(messagesTransform[1].includes("unshift"), "unshifts into parts");
+      // Guard against double-injection
+      assert.ok(messagesTransform[1].includes("EXTREMELY_IMPORTANT"), "guard checks for EXTREMELY_IMPORTANT marker");
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
@@ -272,8 +292,8 @@ describe("Events: opencode plugin generation", () => {
       installEvents("opencode", projectRoot, resolved, ".agents/skills");
       const content = readFileSync(join(projectRoot, ".opencode/plugin/adlc-skills-events.ts"), "utf-8");
 
-      assert.ok(content.includes("experimental.chat.system.transform"), "system.transform hook present");
-      assert.ok(!content.includes("chat.message"), "no chat.message hook for session_start-only manifest");
+      assert.ok(content.includes("experimental.chat.messages.transform"), "messages.transform hook present");
+      assert.ok(!content.includes('"chat.message"'), "no chat.message hook for session_start-only manifest");
       assert.ok(!content.includes("team-discover"), "no team-discover reference");
       assert.ok(content.includes("team-boot"), "team-boot present");
     } finally {
@@ -436,6 +456,167 @@ describe("Events: surgical teardown", () => {
   });
 });
 
+describe("Events: read-failure preservation (spec-kit #3861)", () => {
+  it("unreadable .codex/config.toml aborts install, does not overwrite", () => {
+    const projectRoot = createTestProject(false);
+    try {
+      // A directory at the config path makes readFileSync fail (EISDIR) on
+      // every platform — a robust stand-in for EACCES.
+      mkdirSync(join(projectRoot, ".codex", "config.toml"), { recursive: true });
+
+      const agentConfig = getEventAgentConfig("codex");
+      const resolved = resolveEvents(SAMPLE_MANIFEST, agentConfig);
+      const result = installEvents("codex", projectRoot, resolved, ".agents/skills");
+      assert.equal(result.error, "read-failed-preserved");
+      assert.equal(result.merged, false);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("unreadable .codex/config.toml → teardown reports manual, never crashes", () => {
+    const projectRoot = createTestProject(false);
+    try {
+      mkdirSync(join(projectRoot, ".codex", "config.toml"), { recursive: true });
+      const result = removeEvents("codex", projectRoot);
+      assert.equal(result.action, "manual");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("unreadable opencode plugin → teardown reports manual", () => {
+    const projectRoot = createTestProject(false);
+    try {
+      mkdirSync(join(projectRoot, ".opencode", "plugin", "adlc-skills-events.ts"), { recursive: true });
+      const result = removeEvents("opencode", projectRoot);
+      assert.equal(result.action, "manual");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("Events: teardown safe-destination (spec-kit R3)", () => {
+  it("symlinked .codex/config.toml → teardown refuses, outside file untouched", () => {
+    const projectRoot = createTestProject(false);
+    const outside = mkdtempSync(join(tmpdir(), "adlc-outside-"));
+    try {
+      const outsideFile = join(outside, "config.toml");
+      writeFileSync(outsideFile, "# user toml\n", "utf-8");
+      mkdirSync(join(projectRoot, ".codex"), { recursive: true });
+      symlinkSync(outsideFile, join(projectRoot, ".codex", "config.toml"));
+
+      assert.throws(() => removeEvents("codex", projectRoot), /Unsafe destination/);
+      assert.equal(readFileSync(outsideFile, "utf-8"), "# user toml\n", "Outside file untouched");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("symlinked .claude/settings.json → teardown refuses, outside file untouched", () => {
+    const projectRoot = createTestProject(false);
+    const outside = mkdtempSync(join(tmpdir(), "adlc-outside-"));
+    try {
+      const outsideFile = join(outside, "settings.json");
+      writeFileSync(outsideFile, '{"hooks":{}}\n', "utf-8");
+      mkdirSync(join(projectRoot, ".claude"), { recursive: true });
+      symlinkSync(outsideFile, join(projectRoot, ".claude", "settings.json"));
+
+      assert.throws(() => removeEvents("claude-code", projectRoot), /Unsafe destination/);
+      assert.equal(readFileSync(outsideFile, "utf-8"), '{"hooks":{}}\n', "Outside file untouched");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("Events: non-UTF-8 tolerance (spec-kit #3900)", () => {
+  it("non-UTF-8 .events.json → null with a warning, not silent", () => {
+    const dir = mkdtempSync(join(tmpdir(), "adlc-latin1-"));
+    try {
+      // Latin-1 encoded: {"events": {}, "note": "café"} with raw 0xE9 for é.
+      const latin1 = Buffer.concat([
+        Buffer.from('{"events": {}, "note": "caf', "utf-8"),
+        Buffer.from([0xe9]),
+        Buffer.from('"}', "utf-8"),
+      ]);
+      writeFileSync(join(dir, ".events.json"), latin1);
+
+      const warnings = [];
+      const origWarn = console.warn;
+      console.warn = (msg) => warnings.push(String(msg));
+      try {
+        assert.equal(readLocalEventsManifest(dir), null);
+      } finally {
+        console.warn = origWarn;
+      }
+      assert.ok(warnings.some((w) => w.includes("UTF-8")), "warning printed, not silent");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("valid UTF-8 .events.json → no warning", () => {
+    const dir = mkdtempSync(join(tmpdir(), "adlc-utf8-"));
+    try {
+      writeFileSync(join(dir, ".events.json"), JSON.stringify(SAMPLE_MANIFEST), "utf-8");
+      const warnings = [];
+      const origWarn = console.warn;
+      console.warn = (msg) => warnings.push(String(msg));
+      try {
+        assert.ok(readLocalEventsManifest(dir));
+      } finally {
+        console.warn = origWarn;
+      }
+      assert.equal(warnings.length, 0, "no warning for valid UTF-8");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("Events: opencode plugin TS literal escaping (spec-kit S1)", () => {
+  it("skill names with quotes are JSON-serialized, not interpolated raw", () => {
+    const projectRoot = createTestProject(false);
+    try {
+      const manifest = {
+        events: {
+          session_start: [{ skill: 'te"am', timeout: 60 }],
+        },
+      };
+      const agentConfig = getEventAgentConfig("opencode");
+      const resolved = resolveEvents(manifest, agentConfig);
+      installEvents("opencode", projectRoot, resolved, ".agents/skills");
+      const content = readFileSync(join(projectRoot, ".opencode/plugin/adlc-skills-events.ts"), "utf-8");
+
+      assert.ok(content.includes(JSON.stringify('te"am')), "skill name serialized as JSON string literal");
+      assert.ok(!content.includes('"te"am"'), "no raw interpolation that would break the TS literal");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("skillsDir with backslashes is JSON-serialized in the plugin", () => {
+    const projectRoot = createTestProject(false);
+    try {
+      const agentConfig = getEventAgentConfig("opencode");
+      const resolved = resolveEvents(SAMPLE_MANIFEST, agentConfig);
+      installEvents("opencode", projectRoot, resolved, ".agents\\skills");
+      const content = readFileSync(join(projectRoot, ".opencode/plugin/adlc-skills-events.ts"), "utf-8");
+
+      assert.ok(
+        content.includes(`let SKILLS_DIR = ${JSON.stringify(".agents\\skills")}`),
+        "Windows-style skills dir serialized safely",
+      );
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("Dispatcher: execution paths", () => {
   it("body path: outputs skill body when no scripts:", () => {
     const projectRoot = createTestProject(true);
@@ -518,6 +699,56 @@ echo "SCRIPT_OUTPUT: constitution loaded"`,
       assert.equal(result.status, 0, "fail-open exits 0");
       assert.ok(result.stderr.includes("not found"), "Error logged to stderr");
       assert.equal(result.stdout, "", "No stdout output");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("stdin payload is capped at 1 MiB — truncated with a warning, still runs (spec-kit #3857)", () => {
+    const projectRoot = createTestProject(true);
+    try {
+      installDispatcher(projectRoot);
+      const dispatcher = join(projectRoot, DISPATCHER_REL);
+      const skillsDir = join(projectRoot, ".agents", "skills");
+
+      const bigInput = "x".repeat(2 * 1024 * 1024); // 2 MiB
+      const result = spawnSync("node", [dispatcher, "session_start", "team-boot", skillsDir, "10"], {
+        input: bigInput,
+        encoding: "utf-8",
+        cwd: projectRoot,
+        maxBuffer: 4 * 1024 * 1024,
+      });
+
+      assert.equal(result.status, 0, `dispatcher exited ${result.status}: ${result.stderr}`);
+      assert.ok(result.stderr.includes("exceeded"), "truncation warning on stderr");
+      assert.ok(result.stdout.includes("Read .adlc/init-options.json"), "body still output");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("non-UTF-8 SKILL.md → body injection skipped with a warning (fail-open)", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "adlc-latin1-skill-"));
+    try {
+      const skillsDir = join(projectRoot, ".agents", "skills");
+      mkdirSync(join(skillsDir, "legacy-skill"), { recursive: true });
+      const latin1 = Buffer.concat([
+        Buffer.from("---\nname: legacy-skill\ndescription: Legacy\n---\n\n# caf", "utf-8"),
+        Buffer.from([0xe9]),
+      ]);
+      writeFileSync(join(skillsDir, "legacy-skill", "SKILL.md"), latin1);
+
+      installDispatcher(projectRoot);
+      const dispatcher = join(projectRoot, DISPATCHER_REL);
+
+      const result = spawnSync("node", [dispatcher, "session_start", "legacy-skill", skillsDir, "10"], {
+        encoding: "utf-8",
+        cwd: projectRoot,
+      });
+
+      assert.equal(result.status, 0, "fail-open exits 0");
+      assert.ok(result.stderr.includes("UTF-8"), "warning on stderr");
+      assert.equal(result.stdout, "", "no mojibake injected into context");
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }

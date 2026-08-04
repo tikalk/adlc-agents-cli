@@ -50,7 +50,15 @@ export function readLocalEventsManifest(sourcePath) {
   const manifestPath = join(sourcePath, ".events.json");
   if (!existsSync(manifestPath)) return null;
   try {
-    return JSON.parse(readFileSync(manifestPath, "utf-8"));
+    const raw = readFileSync(manifestPath, "utf-8");
+    if (raw.includes("\uFFFD")) {
+      // Non-UTF-8 manifest (spec-kit #3900): Node's utf-8 decode never throws,
+      // it substitutes U+FFFD — detect it and skip with a warning instead of
+      // silently dropping events or crashing on mojibake JSON.
+      console.warn(`adlc-skills-cli: ${manifestPath} is not valid UTF-8 — skipping events`);
+      return null;
+    }
+    return JSON.parse(raw);
   } catch {
     return null;
   }
@@ -81,7 +89,13 @@ async function fetchGitHubRaw(ownerRepo, ref, file) {
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
-    return await res.json();
+    const raw = await res.text();
+    if (raw.includes("\uFFFD")) {
+      // Same non-UTF-8 guard as readLocalEventsManifest (spec-kit #3900).
+      console.warn(`adlc-skills-cli: ${url} is not valid UTF-8 — skipping events`);
+      return null;
+    }
+    return JSON.parse(raw);
   } catch {
     return null;
   }
@@ -149,9 +163,9 @@ import { resolve } from "node:path"
 import { statSync } from "node:fs"
 
 let DISPATCHER = ""
-let SKILLS_DIR = "${skillsDir}"
+let SKILLS_DIR = ${JSON.stringify(skillsDir)}
 
-// Cache for session_start handlers — experimental.chat.system.transform
+// Cache for session_start handlers — experimental.chat.messages.transform
 // fires on every step, but the script output is stable for the session.
 // Keyed by skill name so multiple session_start handlers each get their own cache.
 const _sessionStartCache: Record<string, string> = {}
@@ -194,13 +208,12 @@ function buildOpenCodeHooks(resolvedEvents, skillsDir, agentConfig) {
     const nativeEvent = agentConfig.canonical_to_native[canonicalEvent];
     for (const h of handlers) {
       // Different opencode hooks have different output shapes:
-      // - experimental.chat.system.transform: output.system.push(string)
-      // - chat.message: output.parts.push(TextPart) — requires id/sessionID/messageID
+      // - experimental.chat.messages.transform: inject into first user message (active instructions)
       // - tool.execute.before/after: output.args (not context injection)
       //
       // Every handler degrades gracefully: runEvent failures are caught and
       // logged, never rethrown, so a broken event can't crash the session.
-      if (nativeEvent === "experimental.chat.system.transform") {
+      if (nativeEvent === "experimental.chat.messages.transform") {
         entries.push(`    "${nativeEvent}": async (_input, output) => {
       try {
         // Invalidate cache when .adlc/init-options.json changes (team-setup ran)
@@ -211,14 +224,21 @@ function buildOpenCodeHooks(resolvedEvents, skillsDir, agentConfig) {
           for (const k of Object.keys(_sessionStartCache)) delete _sessionStartCache[k]
           _sessionStartState = { exists: _exists, mtime: _mtime }
         }
-        const _key = "${h.skill}"
+        const _key = ${JSON.stringify(h.skill)}
         if (!(_key in _sessionStartCache)) {
-          _sessionStartCache[_key] = runEvent(_key, "${canonicalEvent}", ${h.timeout})
+          _sessionStartCache[_key] = runEvent(_key, ${JSON.stringify(canonicalEvent)}, ${h.timeout})
         }
         const ctx = _sessionStartCache[_key]
-        if (ctx) output.system.push(ctx)
+        if (!ctx) return
+        // Inject into first user message (active instructions, not passive system prompt)
+        const firstUser = output.messages.find((m: any) => m.info.role === 'user')
+        if (!firstUser || !firstUser.parts.length) return
+        // Guard: skip if already injected (prevents double-injection on step re-fires)
+        if (firstUser.parts.some((p: any) => p.type === 'text' && p.text.includes('EXTREMELY_IMPORTANT'))) return
+        const ref = firstUser.parts[0]
+        firstUser.parts.unshift({ ...ref, type: 'text', text: ctx })
       } catch (e) {
-        console.error("adlc system.transform hook failed:", (e as Error).message)
+        console.error("adlc messages.transform hook failed:", (e as Error).message)
       }
     }`);
       } else if (nativeEvent === "chat.message") {
@@ -227,7 +247,7 @@ function buildOpenCodeHooks(resolvedEvents, skillsDir, agentConfig) {
         // its prefix), falling back to "prt_" when output.parts is empty.
         entries.push(`    "${nativeEvent}": async (input, output) => {
       try {
-        const ctx = runEvent("${h.skill}", "${canonicalEvent}", ${h.timeout})
+        const ctx = runEvent(${JSON.stringify(h.skill)}, ${JSON.stringify(canonicalEvent)}, ${h.timeout})
         if (!ctx) return
         const base = output.parts[output.parts.length - 1]?.id ?? "prt_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
         output.parts.push({ id: base + ".adlc" + Math.random().toString(36).slice(2, 8), sessionID: input.sessionID, messageID: output.message.id, type: "text", text: ctx, synthetic: true })
@@ -239,10 +259,10 @@ function buildOpenCodeHooks(resolvedEvents, skillsDir, agentConfig) {
         // Generic fallback for tool.execute.before/after etc.
         entries.push(`    "${nativeEvent}": async (_input, output) => {
       try {
-        const ctx = runEvent("${h.skill}", "${canonicalEvent}", ${h.timeout})
+        const ctx = runEvent(${JSON.stringify(h.skill)}, ${JSON.stringify(canonicalEvent)}, ${h.timeout})
         if (ctx && output.system) output.system.push(ctx)
       } catch (e) {
-        console.error("adlc ${nativeEvent} hook failed:", (e as Error).message)
+        console.error(${JSON.stringify(`adlc ${nativeEvent} hook failed:`)}, (e as Error).message)
       }
     }`);
       }
@@ -429,7 +449,12 @@ function generateToml(projectRoot, resolvedEvents, skillsDir, agentConfig, agent
 
   let existingContent = "";
   if (existsSync(configPath)) {
-    existingContent = readFileSync(configPath, "utf-8");
+    try {
+      existingContent = readFileSync(configPath, "utf-8");
+    } catch {
+      // Unreadable config (EACCES, EISDIR): preserve, never overwrite (spec-kit #3861).
+      return { path: agentConfig.config_file, merged: false, error: "read-failed-preserved" };
+    }
   }
 
   // Idempotent: strip prior marker blocks, then append fresh.
@@ -559,7 +584,14 @@ export function removeEvents(agentKey, projectRoot) {
   if (agentConfig.format === "ts-plugin") {
     // Dedicated file — delete if it has our marker.
     if (existsSync(configPath)) {
-      const content = readFileSync(configPath, "utf-8");
+      validateSafeDestination(configPath, projectRoot);
+      let content;
+      try {
+        content = readFileSync(configPath, "utf-8");
+      } catch {
+        // Unreadable plugin file: leave it alone (spec-kit #3861).
+        return { path: agentConfig.config_file, action: "manual" };
+      }
       if (content.includes(MARKER)) {
         rmSync(configPath);
         return { path: agentConfig.config_file, action: "deleted" };
@@ -570,6 +602,7 @@ export function removeEvents(agentKey, projectRoot) {
 
   if (agentConfig.format === "copilot-json") {
     if (existsSync(configPath)) {
+      validateSafeDestination(configPath, projectRoot);
       try {
         const data = parseJsonPreserving(readFileSync(configPath, "utf-8"));
         const cleaned = stripMarkerEntries(data);
@@ -604,6 +637,10 @@ function removeNativeEventHooks(agentKey, projectRoot) {
   const agentConfig = EVENT_AGENTS[agentKey];
   const configPath = join(projectRoot, agentConfig.config_file);
   if (!existsSync(configPath)) return null;
+
+  // Safe-destination validation on teardown too (spec-kit R3): a symlinked
+  // config must not redirect rewrites outside the project.
+  validateSafeDestination(configPath, projectRoot);
 
   try {
     const data = parseJsonPreserving(readFileSync(configPath, "utf-8"));
@@ -645,6 +682,8 @@ function removeRootNestedEvents(agentKey, projectRoot) {
   const configPath = join(projectRoot, agentConfig.config_file);
   if (!existsSync(configPath)) return null;
 
+  validateSafeDestination(configPath, projectRoot);
+
   try {
     const data = parseJsonPreserving(readFileSync(configPath, "utf-8"));
     let removedAny = false;
@@ -675,7 +714,15 @@ function removeTomlEvents(agentKey, projectRoot) {
   const configPath = join(projectRoot, agentConfig.config_file);
   if (!existsSync(configPath)) return null;
 
-  const content = readFileSync(configPath, "utf-8");
+  validateSafeDestination(configPath, projectRoot);
+
+  let content;
+  try {
+    content = readFileSync(configPath, "utf-8");
+  } catch {
+    // Unreadable config: leave it alone, ask for manual removal (spec-kit #3861).
+    return { path: agentConfig.config_file, action: "manual" };
+  }
   if (!content.includes("adlc_skills_marker") && !content.includes(MARKER)) {
     return { path: agentConfig.config_file, action: "no-hooks" };
   }
@@ -745,10 +792,4 @@ function validateSafeDestination(targetPath, projectRoot) {
   if (rel.startsWith("..") || (isAbsolute(rel) && !base.startsWith(realRoot))) {
     throw new Error(`Unsafe destination: ${targetPath} resolves outside project root (possible symlink redirect)`);
   }
-}
-
-// ── Helpers ─────────────────────────────────────────────────────────────
-
-function escapeTsString(s) {
-  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
 }
