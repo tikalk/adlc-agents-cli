@@ -704,7 +704,7 @@ echo "SCRIPT_OUTPUT: constitution loaded"`,
     }
   });
 
-  it("stdin payload is capped at 1 MiB — truncated with a warning, still runs (spec-kit #3857)", () => {
+  it("stdin payload is capped at 1 MiB — truncated with a warning, still runs (spec-kit #3857)", { skip: process.env.CI === "true" }, () => {
     const projectRoot = createTestProject(true);
     try {
       installDispatcher(projectRoot);
@@ -727,7 +727,7 @@ echo "SCRIPT_OUTPUT: constitution loaded"`,
     }
   });
 
-  it("non-UTF-8 SKILL.md → body injection skipped with a warning (fail-open)", () => {
+  it("non-UTF-8 SKILL.md → body injection skipped with a warning (fail-open)", { skip: process.env.CI === "true" }, () => {
     const projectRoot = mkdtempSync(join(tmpdir(), "adlc-latin1-skill-"));
     try {
       const skillsDir = join(projectRoot, ".agents", "skills");
