@@ -146,6 +146,7 @@ function generateOpenCodePlugin(projectRoot, resolvedEvents, skillsDir, agentCon
 import type { Plugin } from "@opencode-ai/plugin"
 import { execFileSync } from "node:child_process"
 import { resolve } from "node:path"
+import { statSync } from "node:fs"
 
 let DISPATCHER = ""
 let SKILLS_DIR = "${skillsDir}"
@@ -154,6 +155,10 @@ let SKILLS_DIR = "${skillsDir}"
 // fires on every step, but the script output is stable for the session.
 // Keyed by skill name so multiple session_start handlers each get their own cache.
 const _sessionStartCache: Record<string, string> = {}
+
+// Track init-options.json state so the cache invalidates when team-setup
+// creates/modifies/deletes the config (e.g., unconfigured → configured).
+let _sessionStartState: { exists: boolean; mtime: number } = { exists: false, mtime: 0 }
 
 function runEvent(command: string, event: string, timeoutSec: number): string {
   try {
@@ -198,6 +203,14 @@ function buildOpenCodeHooks(resolvedEvents, skillsDir, agentConfig) {
       if (nativeEvent === "experimental.chat.system.transform") {
         entries.push(`    "${nativeEvent}": async (_input, output) => {
       try {
+        // Invalidate cache when .adlc/init-options.json changes (team-setup ran)
+        let _exists = false, _mtime = 0
+        try { const st = statSync(".adlc/init-options.json"); _exists = true; _mtime = st.mtimeMs } catch {}
+        const _stateChanged = _exists !== _sessionStartState.exists || _mtime !== _sessionStartState.mtime
+        if (_stateChanged) {
+          for (const k of Object.keys(_sessionStartCache)) delete _sessionStartCache[k]
+          _sessionStartState = { exists: _exists, mtime: _mtime }
+        }
         const _key = "${h.skill}"
         if (!(_key in _sessionStartCache)) {
           _sessionStartCache[_key] = runEvent(_key, "${canonicalEvent}", ${h.timeout})

@@ -238,6 +238,32 @@ describe("Events: opencode plugin generation", () => {
     }
   });
 
+  it("session_start handler invalidates cache when init-options.json changes", () => {
+    const projectRoot = createTestProject(false);
+    try {
+      const agentConfig = getEventAgentConfig("opencode");
+      const resolved = resolveEvents(SAMPLE_MANIFEST, agentConfig);
+      installEvents("opencode", projectRoot, resolved, ".agents/skills");
+      const content = readFileSync(join(projectRoot, ".opencode/plugin/adlc-skills-events.ts"), "utf-8");
+
+      // statSync import for mtime tracking
+      assert.ok(content.includes("statSync"), "statSync imported from node:fs");
+
+      // State tracking variable
+      assert.ok(content.includes("_sessionStartState"), "state tracking variable present");
+
+      // system.transform handler invalidates on state change
+      const systemTransform = content.match(/"experimental\.chat\.system\.transform": async \(_input, output\) => \{([\s\S]*?)\n    \}/);
+      assert.ok(systemTransform, "system.transform handler present");
+      assert.ok(systemTransform[1].includes("statSync"), "handler uses statSync to check mtime");
+      assert.ok(systemTransform[1].includes(".adlc/init-options.json"), "handler checks init-options.json");
+      assert.ok(systemTransform[1].includes("_sessionStartState"), "handler references state variable");
+      assert.ok(systemTransform[1].includes("delete _sessionStartCache"), "handler clears cache on state change");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   it("session_start-only manifest generates no chat.message hook", () => {
     const projectRoot = createTestProject(false);
     try {
