@@ -81,6 +81,15 @@ export async function fetchEventsManifest(source) {
     return await fetchGitHubRaw(ghMatch[1], "HEAD", ".events.json");
   }
 
+  // Bare local directory name (e.g., "adlc-team-skills").
+  // The skills CLI falls back to { type: "git", url: source } for inputs that
+  // match no URL/shorthand pattern, and git treats bare names as local paths
+  // (git clone <dir>). Probe for a local .events.json so events aren't
+  // silently dropped when the source is a local directory clone.
+  if (existsSync(source)) {
+    return readLocalEventsManifest(source);
+  }
+
   return null;
 }
 
