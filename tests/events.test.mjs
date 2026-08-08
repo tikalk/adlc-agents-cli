@@ -12,6 +12,7 @@ import {
   removeEvents,
   resolveEvents,
   readLocalEventsManifest,
+  fetchEventsManifest,
 } from "../src/events.mjs";
 import {
   EVENT_AGENTS,
@@ -95,6 +96,57 @@ describe("Events: manifest discovery", () => {
       assert.equal(readLocalEventsManifest(dir), null);
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("Events: fetchEventsManifest source resolution", () => {
+  it("resolves bare local directory name (no ./ prefix) — git clone <dir> parity", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "adlc-bare-"));
+    const origCwd = process.cwd();
+    try {
+      process.chdir(parent);
+      const dirName = "adlc-team-skills";
+      mkdirSync(join(parent, dirName), { recursive: true });
+      writeFileSync(join(parent, dirName, ".events.json"), JSON.stringify(SAMPLE_MANIFEST), "utf-8");
+
+      const manifest = await fetchEventsManifest(dirName);
+      assert.ok(manifest, "manifest resolved for bare directory name");
+      assert.deepEqual(Object.keys(manifest.events), ["session_start", "user_prompt_submit"]);
+    } finally {
+      process.chdir(origCwd);
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  it("returns null for non-existent bare name", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "adlc-noexist-"));
+    const origCwd = process.cwd();
+    try {
+      process.chdir(parent);
+      const manifest = await fetchEventsManifest("does-not-exist");
+      assert.equal(manifest, null);
+    } finally {
+      process.chdir(origCwd);
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  it("explicit ./ prefix still resolves (existing behavior preserved)", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "adlc-dotprefix-"));
+    const origCwd = process.cwd();
+    try {
+      process.chdir(parent);
+      const dirName = "my-skills";
+      mkdirSync(join(parent, dirName), { recursive: true });
+      writeFileSync(join(parent, dirName, ".events.json"), JSON.stringify(SESSION_START_ONLY_MANIFEST), "utf-8");
+
+      const manifest = await fetchEventsManifest(`./${dirName}`);
+      assert.ok(manifest, "manifest resolved with ./ prefix");
+      assert.deepEqual(Object.keys(manifest.events), ["session_start"]);
+    } finally {
+      process.chdir(origCwd);
+      rmSync(parent, { recursive: true, force: true });
     }
   });
 });

@@ -24,12 +24,17 @@
 //   2. Body path (superpowers model): output the skill's markdown body
 //      (frontmatter stripped). LLM-interpreted orientation/instructions.
 
-import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readSync, existsSync, readdirSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { isatty } from "node:tty";
 import { join, resolve, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const DEFAULT_TIMEOUT = 60;
+
+// Bound the hook payload read from stdin (spec-kit #3857): an unbounded
+// readFileSync(0) lets a hostile or buggy agent exhaust memory on every fire.
+const MAX_STDIN_BYTES = 1024 * 1024; // 1 MiB
 
 const BODY_INJECTION_EVENTS = new Set(["session_start", "user_prompt_submit"]);
 
@@ -90,6 +95,13 @@ function main() {
 
   // Path 2: body injection (superpowers model) — applies to orientation events.
   if (BODY_INJECTION_EVENTS.has(event)) {
+    if (content.includes("\uFFFD")) {
+      // Non-UTF-8 skill file (spec-kit #3895 class): Node's utf-8 decode
+      // substitutes U+FFFD, so injecting the body would push mojibake into
+      // the agent's context. Skip instead — fail-open, with a warning.
+      process.stderr.write(`dispatcher: skill "${skillName}" is not valid UTF-8 — skipping body injection\n`);
+      process.exit(0);
+    }
     writeOutput(body, envelope);
     process.exit(0);
   }
@@ -340,16 +352,40 @@ function parseTimeout(arg) {
 }
 
 function readPayload() {
-  // Read stdin if available (non-tty). For user_prompt_submit the agent
-  // pipes the user's prompt as JSON. Otherwise "{}".
+  // Read stdin if available (non-tty), bounded at MAX_STDIN_BYTES. For
+  // user_prompt_submit the agent pipes the user's prompt as JSON. Oversized
+  // payloads are truncated with a warning rather than buffered whole
+  // (fail-open keeps the agent session alive either way).
+  //
+  // NOTE: tty.isatty(0), never process.stdin.isTTY — merely referencing
+  // process.stdin switches fd 0 to non-blocking mode, which makes readSync
+  // throw EAGAIN instead of reading the piped payload.
   try {
-    if (!process.stdin.isTTY) {
-      return readFileSync(0, "utf-8");
+    if (isatty(0)) return "{}";
+    const chunks = [];
+    let total = 0;
+    let truncated = false;
+    const buf = Buffer.alloc(64 * 1024);
+    for (;;) {
+      const n = readSync(0, buf, 0, buf.length, null);
+      if (n === 0) break; // EOF
+      const remaining = MAX_STDIN_BYTES - total;
+      if (n > remaining) {
+        if (remaining > 0) chunks.push(buf.subarray(0, remaining));
+        truncated = true;
+        break;
+      }
+      chunks.push(buf.subarray(0, n));
+      total += n;
     }
+    if (truncated) {
+      process.stderr.write(`dispatcher: stdin payload exceeded ${MAX_STDIN_BYTES} bytes — truncated\n`);
+    }
+    return Buffer.concat(chunks).toString("utf-8");
   } catch {
     // stdin not available
+    return "{}";
   }
-  return "{}";
 }
 
 main();
